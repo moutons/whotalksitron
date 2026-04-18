@@ -1,0 +1,53 @@
+name: Refactor
+about: Propose a code refactor or restructuring
+labels:
+  - refactor
+body:
+  - type: textarea
+    id: current_state
+    attributes:
+      label: Current state
+      description: What exists today that needs to change
+    validations:
+      required: true
+  - type: textarea
+    id: desired_state
+    attributes:
+      label: Desired state
+      description: What it should look like after the refactor
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why this refactor matters (not just "code quality")
+    validations:
+      required: true
+  - type: textarea
+    id: affected_paths
+    attributes:
+      label: Affected paths
+      description: Files and modules in scope for this refactor
+      placeholder: |
+        - src/auth/middleware.go
+        - src/auth/session.go
+    validations:
+      required: true
+  - type: dropdown
+    id: risk_level
+    attributes:
+      label: Risk level
+      options:
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+  - type: textarea
+    id: breaking_changes
+    attributes:
+      label: Breaking changes
+      description: Any breaking changes this refactor would introduce
+    validations:
+      required: false

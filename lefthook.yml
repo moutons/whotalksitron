@@ -1,0 +1,21 @@
+pre-commit:
+  commands:
+    check-env:
+      run: |
+        missing=""
+        [ -z "$CLAUDEBOT_EMAIL" ] && missing="$missing CLAUDEBOT_EMAIL"
+        [ -z "$CLAUDEBOT_FJ_TOKEN" ] && missing="$missing CLAUDEBOT_FJ_TOKEN"
+        if [ -n "$missing" ]; then
+          echo "ERROR: required env vars not set:$missing"
+          echo "See README.md for setup instructions."
+          exit 1
+        fi
+    mdlint:
+      run: just _ci_mdlint
+    fmtcheck:
+      run: just _ci_fmtcheck
+
+pre-push:
+  commands:
+    ensureci-sandbox:
+      run: just ensureci-sandbox

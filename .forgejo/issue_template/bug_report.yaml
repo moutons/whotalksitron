@@ -1,0 +1,73 @@
+name: Bug Report
+about: Report a bug or unexpected behavior
+labels:
+  - bug
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One-line description of the bug
+      placeholder: "e.g., Login fails when password contains special characters"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps to reproduce the bug
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Observe error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happens instead
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "OS, runtime version, browser, etc."
+      placeholder: "e.g., macOS 15.3, Go 1.23, Chrome 130"
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Stack trace / logs
+      description: Paste any relevant error output
+      render: shell
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - critical
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+  - type: input
+    id: affected_files
+    attributes:
+      label: Affected files
+      description: File paths related to the bug (helps agents locate the problem)
+      placeholder: "e.g., src/auth/login.go, src/auth/login_test.go"
+    validations:
+      required: false

@@ -1,0 +1,13 @@
+# Gitleaks configuration
+# See: https://github.com/gitleaks/gitleaks?tab=readme-ov-file#configuration
+#
+# Use this file to allowlist paths containing intentional credential storage
+# (e.g. test fixtures) or to suppress individual findings via .gitleaksignore.
+#
+# Path allowlist example (Golang regex, triple-quoted):
+#
+# [[allowlists]]
+# description = "intentional test fixtures"
+# paths = [
+#   '''test/fixtures/.*''',
+# ]

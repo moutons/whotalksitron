@@ -1,0 +1,28 @@
+ignores:
+  - "docs/superpowers/plans/**"
+
+config:
+  # Disable line length limit
+  MD013: false
+  # Disable bare URL restriction
+  MD034: false
+  # ATX-style headings only
+  MD003:
+    style: "atx"
+  # Fenced code blocks use backticks
+  MD048:
+    style: "backtick"
+  # Consistent unordered list style
+  MD004:
+    style: "dash"
+  # No trailing spaces (except in MD where trim_trailing_whitespace is off)
+  MD009:
+    br_spaces: 2
+  # Not all files need to start with h1 (slash commands, PR template)
+  MD041: false
+  # Code blocks in specs/plans sometimes show file contents without a language
+  MD040: false
+  # Compact table style is intentional
+  MD060: false
+  # Plans use h3 for tasks under an h1 header, skipping h2
+  MD001: false

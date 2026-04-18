@@ -1,0 +1,21 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":pinVersions",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "automerge": false,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch"],
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true
+    },
+    {
+      "matchUpdateTypes": ["minor", "major"],
+      "groupName": "minor and major updates",
+      "automerge": false
+    }
+  ]
+}

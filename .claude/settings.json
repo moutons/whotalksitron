@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(find *)",
+      "Bash(just *)",
+      "Bash(git checkout -b work/*)",
+      "Bash(git checkout -b feature/*)",
+      "Bash(git checkout -b bug/*)",
+      "Bash(git checkout -b chore/*)",
+      "Bash(git checkout work/*)",
+      "Bash(git checkout feature/*)",
+      "Bash(git checkout bug/*)",
+      "Bash(git checkout chore/*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git log *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git branch --show-current)",
+      "Bash(git branch -a)",
+      "Bash(git worktree *)",
+      "Bash(skills-validator validate *)",
+      "Grep(*)",
+      "Glob(*)",
+      "Read(*)",
+      "LS(*)"
+    ]
+  },
+  "env": {
+    "GIT_AUTHOR_NAME": "claude-bot",
+    "GIT_AUTHOR_EMAIL": "${CLAUDEBOT_EMAIL}",
+    "GIT_COMMITTER_NAME": "claude-bot",
+    "GIT_COMMITTER_EMAIL": "${CLAUDEBOT_EMAIL}"
+  }
+}
