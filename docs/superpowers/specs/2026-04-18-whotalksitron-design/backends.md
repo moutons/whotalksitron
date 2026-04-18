@@ -47,7 +47,7 @@ If `--backend` is specified and that backend is unavailable, error immediately w
 - Sends audio to the Gemini API in a single call.
 - Includes enrolled voice samples (raw audio) as prompt context for speaker identification.
 - Returns speaker-attributed segments directly.
-- Handles chunking for files exceeding API size limits.
+- Handles chunking for files exceeding the Gemini API inline data limit (20MB). Files above this threshold are uploaded via the File API before transcription.
 - Authentication: API key (`GEMINI_API_KEY` env var or config) or Google Cloud ADC.
 
 ### pyannote+Whisper
@@ -61,7 +61,8 @@ If `--backend` is specified and that backend is unavailable, error immediately w
 
 ### Whisper-only (Ollama / LM Studio)
 
-- Sends audio to a local OpenAI-compatible endpoint.
+- Sends audio to a local OpenAI-compatible endpoint via `httpx` (not the `openai-whisper` Python library).
+- Targets the `/v1/audio/transcriptions` endpoint exposed by Ollama and LM Studio.
 - Returns timestamped text without speaker attribution.
 - All segments have `speaker = None`.
 - No diarization, no voiceprint matching.

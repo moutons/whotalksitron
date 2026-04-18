@@ -44,12 +44,13 @@ whotalksitron/
 
 ```toml
 [project]
+requires-python = ">=3.11"
 dependencies = [
     "click",
-    "tomli",          # TOML parsing (Python <3.11)
-    "tomli-w",        # TOML writing
+    "tomli-w",        # TOML writing (tomllib is stdlib in 3.11+)
     "google-genai",   # Gemini SDK
     "numpy",          # embeddings
+    "httpx",          # Ollama/LM Studio API client
 ]
 
 [project.optional-dependencies]
@@ -57,7 +58,6 @@ local = [
     "torch",
     "torchaudio",
     "pyannote.audio",
-    "openai-whisper",
 ]
 ```
 

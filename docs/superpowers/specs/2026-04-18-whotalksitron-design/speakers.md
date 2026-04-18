@@ -34,11 +34,11 @@
 
 Primary: pyannote's `wespeaker-voxceleb-resnet34` (small speaker verification model).
 
-Fallback: ONNX-exported model, downloaded on first enrollment. This allows enrollment even when only the Gemini backend is installed. Gemini receives raw audio samples (not embeddings) as prompt context, but the ONNX model enables the shared voiceprint matching layer for any future local backend use.
+Fallback: `speechbrain/spkrec-ecapa-voxceleb` exported to ONNX, downloaded on first enrollment (~80MB). This allows enrollment even when only the Gemini backend is installed. Gemini receives raw audio samples (not embeddings) as prompt context, but the ONNX model enables the shared voiceprint matching layer for any future local backend use.
 
 ## Re-enrollment
 
-`whotalksitron enroll --name matt --podcast atp --rebuild` recomputes embeddings from all stored samples. Useful when the embedding model is upgraded.
+`whotalksitron enroll --name matt --podcast atp --rebuild` recomputes a fresh average embedding across all stored samples. Useful when the embedding model is upgraded or when new samples change the speaker profile.
 
 ## Import
 
