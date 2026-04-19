@@ -263,6 +263,94 @@ def config(ctx, show, set_value, init_config):
     click.echo("Use --show, --set, or --init. Run --help for details.")
 
 
+@main.command("extract-samples")
+@click.argument("audio_file", type=click.Path(exists=True, path_type=Path))
+@click.option("--podcast", default=None)
+@click.option("--output", "-o", default=None, type=click.Path(path_type=Path))
+@click.pass_context
+def extract_samples_cmd(ctx, audio_file, podcast, output):
+    """Extract speaker voice samples from an audio file."""
+    cfg: Config = ctx.obj["config"]
+
+    from whotalksitron.backends import BackendUnavailableError, select_backend
+    from whotalksitron.models import SpeakerPool
+    from whotalksitron.pipeline import Pipeline, PreprocessingError, ValidationError
+    from whotalksitron.speakers.enrollment import SpeakerStore
+    from whotalksitron.speakers.extraction import extract_samples_for_speakers
+
+    progress = ProgressReporter(enabled=ctx.obj["progress"])
+
+    try:
+        backend = select_backend(cfg)
+    except BackendUnavailableError as e:
+        click.echo(str(e), err=True)
+        ctx.exit(2)
+        return
+
+    if not backend.supports_diarization():
+        click.echo(
+            "extract-samples requires a backend that supports diarization. "
+            "Configure gemini or install pyannote: "
+            "uv tool install whotalksitron --with local",
+            err=True,
+        )
+        ctx.exit(2)
+        return
+
+    speakers = None
+    if podcast:
+        store = SpeakerStore(_speakers_dir())
+        speaker_list = store.list_speakers(podcast=podcast)
+        if podcast in speaker_list:
+            sample_map = {}
+            for name in speaker_list[podcast]:
+                sample_map[name] = store.get_sample_paths(name, podcast)
+            speakers = SpeakerPool(podcast=podcast, speakers=sample_map)
+
+    pipeline = Pipeline(cfg)
+    try:
+        result = pipeline.run(
+            audio_path=audio_file,
+            output_path=audio_file.with_suffix(".md"),
+            backend=backend,
+            podcast=podcast,
+            speakers=speakers,
+            progress=progress,
+        )
+    except (ValidationError, PreprocessingError) as e:
+        click.echo(f"Error: {e}", err=True)
+        ctx.exit(1)
+        return
+
+    if not result.transcript or not result.transcript.segments:
+        click.echo("No segments found in transcript.", err=True)
+        ctx.exit(1)
+        return
+
+    output_dir = output or Path("./samples")
+    extracted = extract_samples_for_speakers(
+        audio_file,
+        result.transcript.segments,
+        output_dir,
+    )
+
+    click.echo(f"\nExtracted samples to {output_dir}/:")
+    for speaker, paths in sorted(extracted.items()):
+        matched = "matched" if not speaker.startswith("Speaker") else "unmatched"
+        click.echo(f"  {speaker}/  {len(paths)} clips  ({matched})")
+
+    unmatched = [s for s in extracted if s.startswith("Speaker")]
+    if unmatched and podcast:
+        click.echo("\nTo enroll unmatched speakers:")
+        for speaker in unmatched:
+            safe = speaker.lower().replace(" ", "-")
+            first_clip = extracted[speaker][0] if extracted[speaker] else "sample.wav"  # noqa: F841
+            click.echo(
+                f"  whotalksitron enroll --name NAME --podcast {podcast} "
+                f"--sample {output_dir}/{safe}/sample-001.wav"
+            )
+
+
 def _speakers_dir() -> Path:
     env = os.environ.get("WHOTALKSITRON_SPEAKERS_DIR")
     if env:

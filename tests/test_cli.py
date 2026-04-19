@@ -165,3 +165,10 @@ def test_transcribe_identify_speakers_flag(runner):
 def test_global_flags(runner):
     result = runner.invoke(main, ["--log-level", "debug", "--help"])
     assert result.exit_code == 0
+
+
+def test_extract_samples_help(runner):
+    result = runner.invoke(main, ["extract-samples", "--help"])
+    assert result.exit_code == 0
+    assert "--podcast" in result.output
+    assert "--output" in result.output
