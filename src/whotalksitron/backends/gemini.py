@@ -47,7 +47,7 @@ class GeminiBackend:
             response = retry_with_backoff(
                 lambda: client.models.generate_content(
                     model=self._config.gemini_model,
-                    contents=[*contents, prompt],
+                    contents=[*contents, prompt],  # type: ignore[arg-type]
                 ),
                 retries=3,
                 base_delay=2.0,
@@ -111,16 +111,15 @@ class GeminiBackend:
         parts.append(self._upload_or_inline(audio_path, client))
         return parts
 
-    def _upload_or_inline(
-        self, path: Path, client: genai.Client
-    ) -> types.Part:
+    def _upload_or_inline(self, path: Path, client: genai.Client) -> types.Part:
         file_size = path.stat().st_size
         mime = _guess_mime(path)
 
         if file_size > _INLINE_SIZE_LIMIT:
             logger.info("Uploading %s via File API (%d bytes)", path.name, file_size)
             uploaded = client.files.upload(file=path)
-            return types.Part.from_uri(file_uri=uploaded.uri, mime_type=mime)
+            uri = uploaded.uri or ""
+            return types.Part.from_uri(file_uri=uri, mime_type=mime)
 
         logger.debug("Inlining %s (%d bytes)", path.name, file_size)
         data = path.read_bytes()
@@ -168,12 +167,14 @@ def _parse_response(text: str) -> list[TranscriptSegment]:
         seconds = _parse_timestamp(timestamp_str)
         speaker = speaker.strip() if speaker else None
 
-        segments.append(TranscriptSegment(
-            start=seconds,
-            end=seconds,
-            text=content.strip(),
-            speaker=speaker,
-        ))
+        segments.append(
+            TranscriptSegment(
+                start=seconds,
+                end=seconds,
+                text=content.strip(),
+                speaker=speaker,
+            )
+        )
 
     for i in range(len(segments) - 1):
         segments[i] = TranscriptSegment(

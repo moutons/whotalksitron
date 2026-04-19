@@ -16,6 +16,7 @@ def test_save_and_load_embedding(tmp_path):
     path = tmp_path / "embedding.npy"
     save_embedding(embedding, path)
     loaded = load_embedding(path)
+    assert loaded is not None
     np.testing.assert_array_almost_equal(embedding, loaded)
 
 
@@ -54,5 +55,5 @@ def test_average_embeddings_empty():
 
 
 def test_embedding_computer_protocol():
-    assert "compute" in EmbeddingComputer.__protocol_attrs__
-    assert "is_available" in EmbeddingComputer.__protocol_attrs__
+    assert "compute" in EmbeddingComputer.__protocol_attrs__  # type: ignore[attr-defined]
+    assert "is_available" in EmbeddingComputer.__protocol_attrs__  # type: ignore[attr-defined]

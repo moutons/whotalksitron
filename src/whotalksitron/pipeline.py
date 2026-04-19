@@ -6,6 +6,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 from whotalksitron.backends import Backend
 from whotalksitron.config import Config
 from whotalksitron.models import SpeakerPool, TranscriptResult
@@ -179,7 +181,10 @@ class Pipeline:
                 progress.stage_complete("voiceprint", "no embeddings found")
             return transcript
 
-        detected: dict = transcript.metadata.get("speaker_embeddings", {})
+        raw_detected = transcript.metadata.get("speaker_embeddings", {})
+        detected: dict[str, np.ndarray] = (  # type: ignore[assignment]
+            raw_detected if isinstance(raw_detected, dict) else {}
+        )
 
         if not detected:
             logger.info(
