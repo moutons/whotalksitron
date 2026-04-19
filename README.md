@@ -1,34 +1,62 @@
-# repo-template
+# whotalksitron
 
-Default repository template for new Forgejo projects. Optimized for AI coding agents, usable by humans.
+Audio transcription CLI with speaker identification. Accepts audio files, produces markdown transcripts with speaker-attributed segments and timestamps.
 
-## What's included
+## Features
 
-- **justfile** -- standard task runner recipes (`just test`, `just lint`, `just fmt`, `just secaudit`, `just ensureci`)
-- **lefthook** -- pre-commit (lightweight checks), pre-push (`just ensureci-sandbox`)
-- **markdownlint-cli2** -- deterministic markdown validation at commit-time and in CI
-- **Forgejo Actions CI** -- runs `just ensureci` on push to main and PRs
-- **Agent instructions** -- `.agents/AGENTS.md` (vendor-neutral) and `.claude/CLAUDE.md` (Claude-specific)
-- **Issue templates** -- structured forms for bugs, features, refactors, and test gaps
-- **PR template** -- checklist for spec, tests, and CI
-- **Renovate** -- dependency pinning and automated updates
+- Multiple inference backends: Gemini (primary), pyannote+Whisper (local), Whisper-only (Ollama/LM Studio)
+- Speaker voiceprint enrollment per podcast
+- Machine-parseable progress output for scripting
+- Markdown output with timestamps
 
-## Required environment variables
+## Installation
 
-Set these in your shell profile or CI secrets:
+Gemini-only (lean):
 
-| Variable | Purpose |
-|---|---|
-| `CLAUDEBOT_EMAIL` | Email address used for `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL` when Claude Code commits on your behalf. |
-| `CLAUDEBOT_FJ_TOKEN` | Forgejo API token for Claude Code to interact with the forge (PRs, issues, etc.). |
+```sh
+uv tool install whotalksitron
+```
 
-## Setup after cloning
+With local backends (pyannote, Whisper):
 
-1. Replace this README with your project description.
-2. Update `CODEOWNERS` with the correct owner(s).
-3. Fill in the justfile recipe stubs for your language (run `just` to see the skeleton).
-4. Install lefthook: `lefthook install`
-5. Ensure `CLAUDEBOT_EMAIL` and `CLAUDEBOT_FJ_TOKEN` are set in your environment.
+```sh
+uv tool install whotalksitron --with local
+```
+
+## Usage
+
+```sh
+# Transcribe an episode
+whotalksitron transcribe episode.mp3 --podcast my-show
+
+# Enroll a speaker
+whotalksitron enroll --name matt --podcast my-show --sample voice-sample.mp3
+
+# List enrolled speakers
+whotalksitron list-speakers --podcast my-show
+```
+
+## Configuration
+
+```sh
+whotalksitron config --init    # Create default config
+whotalksitron config --show    # Show resolved config
+```
+
+Config file: `~/.config/whotalksitron/config.toml`
+
+## Development
+
+Requires: Python 3.11+, [uv](https://docs.astral.sh/uv/), [just](https://just.systems/)
+
+```sh
+git clone <repo-url>
+cd whotalksitron
+uv sync --all-extras --group dev
+just test
+just lint
+just ensureci-sandbox
+```
 
 ## License
 

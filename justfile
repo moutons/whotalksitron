@@ -10,22 +10,19 @@ lint: _ci_lint
 
 # Auto-format code
 fmt:
-    @echo "fmt: configure per language"
-    @echo "  Go:     golangci-lint run --fix"
-    @echo "  JS/TS:  bun prettier --write ."
-    @echo "  Python: ruff format ."
-    @echo "  Ruby:   rvx rubocop -a"
+    uv run ruff format .
+    uv run ruff check --fix .
 
-# Security audit (gitleaks + language-specific static analysis)
+# Security audit (gitleaks + ruff security rules)
 secaudit: _ci_secaudit
     gitleaks git --platform gitea .
 
 # Full CI simulation
-ensureci: _ci_mdlint _ci_lint _ci_fmtcheck _ci_vulncheck _ci_secaudit _ci_typecheck _ci_testcover _ci_build
+ensureci: _ci_mdlint _ci_lint _ci_fmtcheck _ci_vulncheck _ci_secaudit _ci_typecheck _ci_testcover
     @echo "All CI checks passed!"
 
 # Sandbox-safe CI (no TLS-dependent checks)
-ensureci-sandbox: _ci_mdlint _ci_lint _ci_fmtcheck _ci_secaudit _ci_typecheck _ci_testcover _ci_build
+ensureci-sandbox: _ci_mdlint _ci_lint _ci_fmtcheck _ci_secaudit _ci_typecheck _ci_testcover
     @echo "All sandbox-compatible CI checks passed! (vulncheck skipped)"
 
 # Quick validation
@@ -33,62 +30,29 @@ isgreen: fmt lint test
 
 # Remove build artifacts
 clean:
-    @echo "clean: configure per language"
-    @echo "  Go:     go clean"
-    @echo "  JS/TS:  rm -rf dist node_modules"
-    @echo "  Python: rm -rf __pycache__ .ruff_cache .pytest_cache"
-    @echo "  Ruby:   rm -rf tmp vendor"
+    rm -rf dist/ build/ .ruff_cache/ .pytest_cache/ htmlcov/
+    find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+    find . -name "*.pyc" -delete 2>/dev/null || true
 
 # --- CI sub-recipes (hidden from `just --list`) ---
 
 _ci_mdlint:
-    npx --yes markdownlint-cli2 "**/*.md" "#node_modules"
+    npx --yes markdownlint-cli2 "**/*.md" "#node_modules" "#.venv" "#.pytest_cache"
 
 _ci_lint:
-    @echo "_ci_lint: configure per language"
-    @echo "  Go:     golangci-lint run"
-    @echo "  JS/TS:  bun lint"
-    @echo "  Python: ruff check ."
-    @echo "  Ruby:   rvx rubocop"
+    uv run ruff check .
 
 _ci_fmtcheck:
-    @echo "_ci_fmtcheck: configure per language"
-    @echo "  Go:     golangci-lint run --disable-all -E gofmt"
-    @echo "  JS/TS:  bun prettier --check ."
-    @echo "  Python: ruff format --check ."
-    @echo "  Ruby:   rvx rubocop -f"
+    uv run ruff format --check .
 
 _ci_vulncheck:
-    @echo "_ci_vulncheck: configure per language (requires network)"
-    @echo "  Go:     govulncheck ./..."
-    @echo "  JS/TS:  bun audit"
-    @echo "  Python: uv pip audit"
-    @echo "  Ruby:   rvx bundler-audit"
+    @echo "_ci_vulncheck: not yet configured (requires network)"
 
 _ci_secaudit:
-    @echo "_ci_secaudit: configure per language"
-    @echo "  Go:     gosec ./..."
-    @echo "  JS/TS:  (n/a)"
-    @echo "  Python: ruff check --select S ."
-    @echo "  Ruby:   rvx brakeman"
+    uv run ruff check --select S .
 
 _ci_typecheck:
-    @echo "_ci_typecheck: configure per language"
-    @echo "  Go:     (compiled)"
-    @echo "  JS/TS:  bun tsc --noEmit"
-    @echo "  Python: ty check"
-    @echo "  Ruby:   rvx sorbet"
+    uv run ty check
 
 _ci_testcover:
-    @echo "_ci_testcover: configure per language"
-    @echo "  Go:     go test -race -cover ./..."
-    @echo "  JS/TS:  bun test --coverage"
-    @echo "  Python: uv run pytest --cov"
-    @echo "  Ruby:   rvx rspec"
-
-_ci_build:
-    @echo "_ci_build: configure per language"
-    @echo "  Go:     go build ./..."
-    @echo "  JS/TS:  bun build"
-    @echo "  Python: (n/a)"
-    @echo "  Ruby:   (n/a)"
+    uv run pytest --cov=whotalksitron --cov-report=term-missing

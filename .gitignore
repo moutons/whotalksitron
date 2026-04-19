@@ -25,11 +25,15 @@ node_modules/
 vendor/
 __pycache__/
 *.pyc
+.venv/
+uv.lock
 
 # Coverage
 coverage/
 *.cover
 htmlcov/
+.coverage
+.pytest_cache/
 
 # Worktrees
 .worktrees/
