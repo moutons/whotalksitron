@@ -76,8 +76,14 @@ def main(ctx: click.Context, log_level, log_format, progress, quiet) -> None:
 @click.option("--output", "-o", default=None, type=click.Path(path_type=Path))
 @click.option("--model", default=None)
 @click.option("--identify-speakers", is_flag=True, default=False)
+@click.option(
+    "--overwrite", "-f", is_flag=True, default=False,
+    help="Overwrite output file if it exists.",
+)
 @click.pass_context
-def transcribe(ctx, audio_file, backend, podcast, output, model, identify_speakers):
+def transcribe(
+    ctx, audio_file, backend, podcast, output, model, identify_speakers, overwrite
+):
     """Transcribe an audio file to markdown."""
     cfg: Config = ctx.obj["config"]
 
@@ -112,7 +118,17 @@ def transcribe(ctx, audio_file, backend, podcast, output, model, identify_speake
             speakers = SpeakerPool(podcast=podcast, speakers=sample_map)
 
     if output is None:
-        output = audio_file.with_suffix(".md")
+        output = audio_file.with_name(audio_file.stem + "-transcript.md")
+
+    if output.exists() and not overwrite:
+        click.echo(f"Output file already exists: {output}", err=True)
+        click.echo(
+            "Use --overwrite / -f to overwrite, "
+            "or --output / -o to choose a different path.",
+            err=True,
+        )
+        ctx.exit(1)
+        return
 
     pipeline = Pipeline(cfg)
     try:
@@ -311,7 +327,7 @@ def extract_samples_cmd(ctx, audio_file, podcast, output):
     try:
         result = pipeline.run(
             audio_path=audio_file,
-            output_path=audio_file.with_suffix(".md"),
+            output_path=audio_file.with_name(audio_file.stem + "-transcript.md"),
             backend=backend,
             podcast=podcast,
             speakers=speakers,

@@ -231,6 +231,11 @@ def _upload_to_gcs(path: Path, mime: str, config: Config) -> types.Part:
     blob_name = f"whotalksitron/{path.name}"
     blob = bucket.blob(blob_name)
 
+    gcs_uri = f"gs://{bucket_name}/{blob_name}"
+    if blob.exists():
+        logger.info("GCS blob already exists, skipping upload: %s", gcs_uri)
+        return types.Part.from_uri(file_uri=gcs_uri, mime_type=mime)
+
     logger.info(
         "Uploading %s to gs://%s/%s (%d bytes)",
         path.name,
@@ -239,7 +244,6 @@ def _upload_to_gcs(path: Path, mime: str, config: Config) -> types.Part:
         path.stat().st_size,
     )
     blob.upload_from_filename(str(path), content_type=mime)
-    gcs_uri = f"gs://{bucket_name}/{blob_name}"
     return types.Part.from_uri(file_uri=gcs_uri, mime_type=mime)
 
 
