@@ -122,6 +122,8 @@ class GeminiBackend:
         mime = _guess_mime(path)
 
         if file_size > _INLINE_SIZE_LIMIT:
+            if self._config.gemini_use_adc:
+                return _upload_to_gcs(path, mime, self._config)
             logger.info("Uploading %s via File API (%d bytes)", path.name, file_size)
             uploaded = client.files.upload(file=path)
             if not uploaded.uri:
@@ -212,6 +214,33 @@ def _parse_timestamp(ts: str) -> float:
     except ValueError as exc:
         raise ValueError(f"Non-numeric timestamp components: {ts!r}") from exc
     return h * 3600.0 + m * 60.0 + s
+
+
+def _upload_to_gcs(path: Path, mime: str, config: Config) -> types.Part:
+    from google.cloud import storage  # type: ignore[import-untyped]
+
+    bucket_name = config.gemini_gcs_bucket
+    if not bucket_name:
+        raise RuntimeError(
+            "Vertex AI requires a GCS bucket for files larger than 20MB. "
+            "Set GOOGLE_CLOUD_STORAGE_BUCKET or gemini.gcs_bucket in config."
+        )
+
+    gcs = storage.Client(project=config.gemini_project or None)
+    bucket = gcs.bucket(bucket_name)
+    blob_name = f"whotalksitron/{path.name}"
+    blob = bucket.blob(blob_name)
+
+    logger.info(
+        "Uploading %s to gs://%s/%s (%d bytes)",
+        path.name,
+        bucket_name,
+        blob_name,
+        path.stat().st_size,
+    )
+    blob.upload_from_filename(str(path), content_type=mime)
+    gcs_uri = f"gs://{bucket_name}/{blob_name}"
+    return types.Part.from_uri(file_uri=gcs_uri, mime_type=mime)
 
 
 def _guess_mime(path: Path) -> str:

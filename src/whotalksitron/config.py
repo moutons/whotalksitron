@@ -19,6 +19,7 @@ class Config:
     gemini_use_adc: bool = False
     gemini_project: str = ""
     gemini_location: str = ""
+    gemini_gcs_bucket: str = ""
     gemini_model: str = "gemini-2.5-flash"
     gemini_keychain_account: str = "vertex"
     gemini_keychain_service: str = "vertex-apikey"
@@ -73,6 +74,8 @@ class Config:
             cfg.gemini_project = gemini["project"]
         if "location" in gemini:
             cfg.gemini_location = gemini["location"]
+        if "gcs_bucket" in gemini:
+            cfg.gemini_gcs_bucket = gemini["gcs_bucket"]
         if "model" in gemini:
             cfg.gemini_model = gemini["model"]
         if "keychain_account" in gemini:
@@ -123,6 +126,8 @@ class Config:
             lines.append(f"gemini.project = {self.gemini_project!r}")
         if self.gemini_location:
             lines.append(f"gemini.location = {self.gemini_location!r}")
+        if self.gemini_gcs_bucket:
+            lines.append(f"gemini.gcs_bucket = {self.gemini_gcs_bucket!r}")
         lines.append(f"gemini.model = {self.gemini_model!r}")
 
         lines.append(f"pyannote.whisper_model = {self.pyannote_whisper_model!r}")
@@ -146,6 +151,7 @@ class Config:
                 "use_adc": False,
                 "project": "",
                 "location": "",
+                "gcs_bucket": "",
                 "model": self.gemini_model,
                 "keychain_account": self.gemini_keychain_account,
                 "keychain_service": self.gemini_keychain_service,
@@ -190,6 +196,7 @@ def load_config(
         "GOOGLE_CLOUD_API_KEY": "gemini_api_key",
         "GOOGLE_CLOUD_PROJECT": "gemini_project",
         "GOOGLE_CLOUD_LOCATION": "gemini_location",
+        "GOOGLE_CLOUD_STORAGE_BUCKET": "gemini_gcs_bucket",
         "WHOTALKSITRON_BACKEND": "backend",
         "WHOTALKSITRON_LOG_LEVEL": "log_level",
     }
