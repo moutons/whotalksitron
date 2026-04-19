@@ -29,10 +29,13 @@ def retry_with_backoff(
             last_error = e
             if attempt == retries:
                 break
-            delay = base_delay * (2 ** attempt)
+            delay = base_delay * (2**attempt)
             logger.info(
                 "Retry %d/%d after %s: %.1fs backoff",
-                attempt + 1, retries, type(e).__name__, delay,
+                attempt + 1,
+                retries,
+                type(e).__name__,
+                delay,
             )
             time.sleep(delay)
 

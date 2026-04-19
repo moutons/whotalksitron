@@ -24,7 +24,7 @@ class PyAnnoteBackend:
         progress: ProgressCallback | None = None,
     ) -> TranscriptResult:
         import torch
-        import whisper
+        import whisper  # type: ignore[import-untyped]
         from pyannote.audio import Pipeline as DiarizationPipeline
 
         audio_path = Path(audio_path)
@@ -113,7 +113,9 @@ class PyAnnoteBackend:
                         duration=longest[1] - longest[0],
                     )
                     emb = emb_inference(str(clip_path))
-                    speaker_embeddings[mapped_name] = emb.flatten()
+                    import numpy as np
+
+                    speaker_embeddings[mapped_name] = np.array(emb).flatten()
                     clip_path.unlink(missing_ok=True)
 
         return TranscriptResult(

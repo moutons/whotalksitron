@@ -1,4 +1,3 @@
-
 from whotalksitron.backends.pyannote import (
     _merge_transcription_and_diarization,
     _select_device,

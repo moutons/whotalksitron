@@ -58,12 +58,15 @@ def select_backend(config: Config) -> Backend:
 def _create_backend(name: str, config: Config) -> Backend:
     if name == "gemini":
         from whotalksitron.backends.gemini import GeminiBackend
+
         return GeminiBackend(config)
     elif name == "pyannote":
         from whotalksitron.backends.pyannote import PyAnnoteBackend
+
         return PyAnnoteBackend(config)
     elif name == "whisper":
         from whotalksitron.backends.whisper import WhisperBackend
+
         return WhisperBackend(config)
     else:
         raise BackendUnavailableError(f"Unknown backend: {name!r}")
@@ -71,8 +74,7 @@ def _create_backend(name: str, config: Config) -> Backend:
 
 def _unavailable_message(name: str, backend: Backend) -> str:
     hints = {
-        "gemini": "Set GEMINI_API_KEY or run `gcloud auth "
-        "application-default login`",
+        "gemini": "Set GEMINI_API_KEY or run `gcloud auth application-default login`",
         "pyannote": "Install local extras: `uv tool install whotalksitron "
         "--with local`",
         "whisper": "Start Ollama or LM Studio. No response from endpoint.",

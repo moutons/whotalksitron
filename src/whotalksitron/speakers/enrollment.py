@@ -37,9 +37,7 @@ class SpeakerStore:
         if compute_embedding:
             self._update_embedding(name, podcast)
 
-    def import_speaker(
-        self, name: str, *, from_podcast: str, to_podcast: str
-    ) -> None:
+    def import_speaker(self, name: str, *, from_podcast: str, to_podcast: str) -> None:
         src = self._speaker_dir(from_podcast, name)
         if not src.exists():
             raise FileNotFoundError(
@@ -56,22 +54,16 @@ class SpeakerStore:
         with open(meta_path, "wb") as f:
             tomli_w.dump(meta, f)
 
-    def list_speakers(
-        self, *, podcast: str | None = None
-    ) -> dict[str, list[str]]:
+    def list_speakers(self, *, podcast: str | None = None) -> dict[str, list[str]]:
         result: dict[str, list[str]] = {}
         if not self._base.exists():
             return result
 
-        podcasts = (
-            [self._base / podcast] if podcast else list(self._base.iterdir())
-        )
+        podcasts = [self._base / podcast] if podcast else list(self._base.iterdir())
         for podcast_dir in podcasts:
             if not podcast_dir.is_dir():
                 continue
-            speakers = sorted(
-                d.name for d in podcast_dir.iterdir() if d.is_dir()
-            )
+            speakers = sorted(d.name for d in podcast_dir.iterdir() if d.is_dir())
             if speakers:
                 result[podcast_dir.name] = speakers
         return result

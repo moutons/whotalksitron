@@ -208,9 +208,12 @@ def _resolve_secret(cfg: Config) -> str | None:
     try:
         result = subprocess.run(  # noqa: S603
             [  # noqa: S607
-                "security", "find-generic-password",
-                "-a", keychain_account,
-                "-s", keychain_service,
+                "security",
+                "find-generic-password",
+                "-a",
+                keychain_account,
+                "-s",
+                keychain_service,
                 "-w",
             ],
             capture_output=True,

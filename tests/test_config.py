@@ -19,11 +19,13 @@ def test_default_config():
 
 
 def test_config_from_dict():
-    cfg = Config.from_dict({
-        "defaults": {"backend": "gemini", "log_level": "debug"},
-        "gemini": {"model": "gemini-2.5-pro"},
-        "speakers": {"match_threshold": 0.85},
-    })
+    cfg = Config.from_dict(
+        {
+            "defaults": {"backend": "gemini", "log_level": "debug"},
+            "gemini": {"model": "gemini-2.5-pro"},
+            "speakers": {"match_threshold": 0.85},
+        }
+    )
     assert cfg.backend == "gemini"
     assert cfg.log_level == "debug"
     assert cfg.gemini_model == "gemini-2.5-pro"
@@ -113,8 +115,7 @@ def test_config_keychain_retrieval(monkeypatch):
         cfg = load_config(config_path=None, cli_overrides={})
 
     # Verify security command was called with correct args
-    calls = [c for c in mock_run.call_args_list
-             if c[0][0][0] == "security"]
+    calls = [c for c in mock_run.call_args_list if c[0][0][0] == "security"]
     assert len(calls) >= 1
     assert "find-generic-password" in calls[0][0][0]
     assert cfg.gemini_api_key == "keychain-api-key-123"
@@ -141,6 +142,7 @@ def test_config_1password_retrieval(monkeypatch, tmp_path):
 
     config_file = tmp_path / "config.toml"
     import tomli_w
+
     data = {
         "gemini": {
             "op_reference": "op://vault/item/field",

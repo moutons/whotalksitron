@@ -31,7 +31,10 @@ def test_retry_succeeds_after_failures():
         return "recovered"
 
     result = retry_with_backoff(
-        fails_twice, retries=3, retry_on=(FlakyError,), base_delay=0.01,
+        fails_twice,
+        retries=3,
+        retry_on=(FlakyError,),
+        base_delay=0.01,
     )
     assert result == "recovered"
     assert call_count == 3
@@ -43,7 +46,10 @@ def test_retry_exhausted():
 
     with pytest.raises(RetryExhausted) as exc_info:
         retry_with_backoff(
-            always_fails, retries=2, retry_on=(FlakyError,), base_delay=0.01,
+            always_fails,
+            retries=2,
+            retry_on=(FlakyError,),
+            base_delay=0.01,
         )
     assert isinstance(exc_info.value.__cause__, FlakyError)
 
@@ -54,12 +60,16 @@ def test_retry_does_not_catch_unexpected_errors():
 
     with pytest.raises(ValueError, match="unexpected"):
         retry_with_backoff(
-            wrong_error, retries=3, retry_on=(FlakyError,), base_delay=0.01,
+            wrong_error,
+            retries=3,
+            retry_on=(FlakyError,),
+            base_delay=0.01,
         )
 
 
 def test_retry_logs_attempts(caplog):
     import logging
+
     call_count = 0
 
     def fails_once():
@@ -71,7 +81,10 @@ def test_retry_logs_attempts(caplog):
 
     with caplog.at_level(logging.INFO, logger="whotalksitron.retry"):
         retry_with_backoff(
-            fails_once, retries=3, retry_on=(FlakyError,), base_delay=0.01,
+            fails_once,
+            retries=3,
+            retry_on=(FlakyError,),
+            base_delay=0.01,
         )
 
     assert any("Retry 1/3" in r.message for r in caplog.records)

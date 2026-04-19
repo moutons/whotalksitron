@@ -113,9 +113,11 @@ def _parse_whisper_response(data: dict) -> list[TranscriptSegment]:
         text = seg.get("text", "").strip()
         if not text:
             continue
-        segments.append(TranscriptSegment(
-            start=float(seg.get("start", 0.0)),
-            end=float(seg.get("end", 0.0)),
-            text=text,
-        ))
+        segments.append(
+            TranscriptSegment(
+                start=float(seg.get("start", 0.0)),
+                end=float(seg.get("end", 0.0)),
+                text=text,
+            )
+        )
     return segments
