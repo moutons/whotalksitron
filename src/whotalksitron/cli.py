@@ -38,26 +38,39 @@ def _setup_logging(level: str, fmt: str) -> None:
     logging.root.setLevel(numeric)
 
 
-@click.group()
-@click.version_option(version=__version__)
-@click.option(
-    "--log-level", default=None, type=click.Choice(["debug", "info", "warn", "error"])
-)
-@click.option("--log-format", default=None, type=click.Choice(["text", "json"]))
-@click.option("--progress", is_flag=True, default=False)
-@click.option("--quiet", "-q", is_flag=True, default=False)
-@click.pass_context
-def main(ctx: click.Context, log_level, log_format, progress, quiet) -> None:
-    """Audio transcription CLI with speaker identification."""
-    ctx.ensure_object(dict)
+_GLOBAL_OPT_NAMES = ("log_level", "log_format", "progress", "quiet")
+
+_global_options = [
+    click.option(
+        "--log-level",
+        default=None,
+        type=click.Choice(["debug", "info", "warn", "error"]),
+    ),
+    click.option("--log-format", default=None, type=click.Choice(["text", "json"])),
+    click.option("--progress", is_flag=True, default=False),
+    click.option("--quiet", "-q", is_flag=True, default=False),
+]
+
+
+def _apply_global_options(fn):
+    for option in reversed(_global_options):
+        fn = option(fn)
+    return fn
+
+
+def _init_context(ctx, log_level, log_format, progress, quiet):
+    if ctx.obj.get("_initialized"):
+        if log_level and log_level != ctx.obj.get("_log_level"):
+            _setup_logging(log_level, log_format or "text")
+        return
+    ctx.obj["_initialized"] = True
+    ctx.obj["_log_level"] = log_level
     ctx.obj["cli_overrides"] = {}
     if log_level:
         ctx.obj["cli_overrides"]["log_level"] = log_level
     if log_format:
         ctx.obj["cli_overrides"]["log_format"] = log_format
 
-    # Set up logging early so config loading is visible at debug level.
-    # Re-apply after config is loaded in case the config file sets a level.
     early_level = log_level or "info"
     early_format = log_format or "text"
     _setup_logging(early_level, early_format)
@@ -78,6 +91,31 @@ def main(ctx: click.Context, log_level, log_format, progress, quiet) -> None:
     ctx.obj["quiet"] = quiet
 
 
+def with_global_options(fn):
+    import functools
+
+    @_apply_global_options
+    @click.pass_context
+    @functools.wraps(fn)
+    def wrapper(ctx, *args, **kwargs):
+        ctx.ensure_object(dict)
+        g = {k: kwargs.pop(k) for k in _GLOBAL_OPT_NAMES}
+        _init_context(ctx, **g)
+        return ctx.invoke(fn, **kwargs)
+
+    return wrapper
+
+
+@click.group()
+@click.version_option(version=__version__)
+@_apply_global_options
+@click.pass_context
+def main(ctx: click.Context, log_level, log_format, progress, quiet) -> None:
+    """Audio transcription CLI with speaker identification."""
+    ctx.ensure_object(dict)
+    _init_context(ctx, log_level, log_format, progress, quiet)
+
+
 @main.command()
 @click.argument("audio_file", type=click.Path(exists=True, path_type=Path))
 @click.option("--backend", type=click.Choice(["gemini", "pyannote", "whisper"]))
@@ -92,11 +130,12 @@ def main(ctx: click.Context, log_level, log_format, progress, quiet) -> None:
     default=False,
     help="Overwrite output file if it exists.",
 )
-@click.pass_context
+@with_global_options
 def transcribe(
-    ctx, audio_file, backend, podcast, output, model, identify_speakers, overwrite
+    audio_file, backend, podcast, output, model, identify_speakers, overwrite
 ):
     """Transcribe an audio file to markdown."""
+    ctx = click.get_current_context()
     cfg: Config = ctx.obj["config"]
 
     if backend:
@@ -171,8 +210,8 @@ def transcribe(
 @click.option("--podcast", required=True)
 @click.option("--sample", required=True, type=click.Path(exists=True, path_type=Path))
 @click.option("--rebuild", is_flag=True, default=False)
-@click.pass_context
-def enroll(ctx, name, podcast, sample, rebuild):
+@with_global_options
+def enroll(name, podcast, sample, rebuild):
     """Enroll a speaker voice sample."""
     from whotalksitron.speakers.enrollment import SpeakerStore
 
@@ -194,9 +233,10 @@ def enroll(ctx, name, podcast, sample, rebuild):
 @click.option("--name", required=True)
 @click.option("--from", "from_podcast", required=True)
 @click.option("--to", "to_podcast", required=True)
-@click.pass_context
-def import_speaker_cmd(ctx, name, from_podcast, to_podcast):
+@with_global_options
+def import_speaker_cmd(name, from_podcast, to_podcast):
     """Import a speaker from one podcast to another."""
+    ctx = click.get_current_context()
     from whotalksitron.speakers.enrollment import SpeakerStore
 
     store = SpeakerStore(_speakers_dir())
@@ -212,8 +252,8 @@ def import_speaker_cmd(ctx, name, from_podcast, to_podcast):
 
 @main.command("list-speakers")
 @click.option("--podcast", default=None)
-@click.pass_context
-def list_speakers_cmd(ctx, podcast):
+@with_global_options
+def list_speakers_cmd(podcast):
     """List enrolled speakers."""
     from whotalksitron.speakers.enrollment import SpeakerStore
 
@@ -236,9 +276,10 @@ def list_speakers_cmd(ctx, podcast):
 @click.option("--show", is_flag=True, default=False)
 @click.option("--set", "set_value", default=None)
 @click.option("--init", "init_config", is_flag=True, default=False)
-@click.pass_context
-def config(ctx, show, set_value, init_config):
+@with_global_options
+def config(show, set_value, init_config):
     """Manage configuration."""
+    ctx = click.get_current_context()
     cfg: Config = ctx.obj["config"]
 
     if init_config:
@@ -295,9 +336,10 @@ def config(ctx, show, set_value, init_config):
 @click.argument("audio_file", type=click.Path(exists=True, path_type=Path))
 @click.option("--podcast", default=None)
 @click.option("--output", "-o", default=None, type=click.Path(path_type=Path))
-@click.pass_context
-def extract_samples_cmd(ctx, audio_file, podcast, output):
+@with_global_options
+def extract_samples_cmd(audio_file, podcast, output):
     """Extract speaker voice samples from an audio file."""
+    ctx = click.get_current_context()
     cfg: Config = ctx.obj["config"]
 
     from whotalksitron.backends import BackendUnavailableError, select_backend
