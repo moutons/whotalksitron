@@ -1,6 +1,6 @@
-# Post-Implementation TODO
+# TODO
 
-Remaining findings from the adversarial review (2026-04-18). Items are grouped by priority.
+Future improvements and post-review findings.
 
 ## Warnings
 
@@ -10,7 +10,7 @@ Remaining findings from the adversarial review (2026-04-18). Items are grouped b
 
 ### Performance: O(N*M) diarization merge
 
-`src/whotalksitron/backends/pyannote.py` — `_find_majority_speaker()` scans all diarization regions for every transcript segment. Same concern as above: fine for typical files, problematic for very long recordings.
+`src/whotalksitron/backends/pyannote.py` — `_find_majority_speaker()` scans all diarization regions for every transcript segment. For typical podcast episodes (hundreds of segments, hundreds of regions) this is fine. For very long recordings or fine-grained diarization, it could become a bottleneck. Optimization: sort diarization regions by start time and use `bisect` to find the relevant window, reducing to O(S log D).
 
 ### Gemini: last segment end-time heuristic
 
@@ -27,6 +27,10 @@ Remaining findings from the adversarial review (2026-04-18). Items are grouped b
 ### Config: tomli_w unconditional import
 
 `src/whotalksitron/config.py:8` — `import tomli_w` at module level but only used in `write_default()`. Could lazy-import to avoid requiring the package for read-only config usage.
+
+## Speaker System
+
+- **ONNX embedding fallback**: `_OnnxEmbedder` in `src/whotalksitron/speakers/embeddings.py` is currently a stub that raises `NotImplementedError`. Implement using `speechbrain/spkrec-ecapa-voxceleb` exported to ONNX (~80MB download on first use) so that voiceprint enrollment works without the full pyannote/torch stack installed.
 
 ## Nits
 
