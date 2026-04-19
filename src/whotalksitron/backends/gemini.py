@@ -118,8 +118,10 @@ class GeminiBackend:
         if file_size > _INLINE_SIZE_LIMIT:
             logger.info("Uploading %s via File API (%d bytes)", path.name, file_size)
             uploaded = client.files.upload(file=path)
-            uri = uploaded.uri or ""
-            return types.Part.from_uri(file_uri=uri, mime_type=mime)
+            if not uploaded.uri:
+                msg = f"Gemini file upload returned no URI for {path.name}"
+                raise RuntimeError(msg)
+            return types.Part.from_uri(file_uri=uploaded.uri, mime_type=mime)
 
         logger.debug("Inlining %s (%d bytes)", path.name, file_size)
         data = path.read_bytes()
@@ -197,7 +199,12 @@ def _parse_response(text: str) -> list[TranscriptSegment]:
 
 def _parse_timestamp(ts: str) -> float:
     parts = ts.split(":")
-    h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
+    if len(parts) != 3:
+        raise ValueError(f"Invalid timestamp format: {ts!r}")
+    try:
+        h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError as exc:
+        raise ValueError(f"Non-numeric timestamp components: {ts!r}") from exc
     return h * 3600.0 + m * 60.0 + s
 
 

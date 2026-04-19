@@ -18,11 +18,11 @@ def test_merge_basic():
 
     merged = _merge_transcription_and_diarization(transcription, diarization)
     assert len(merged) == 3
-    assert merged[0].speaker == "Speaker 1"
+    assert merged[0].speaker == "Speaker 01"
     assert (
-        merged[1].speaker == "Speaker 2"
+        merged[1].speaker == "Speaker 02"
     )  # majority overlap with SPEAKER_01 (3s vs 2s)
-    assert merged[2].speaker == "Speaker 2"
+    assert merged[2].speaker == "Speaker 02"
 
 
 def test_merge_empty_transcription():
@@ -48,7 +48,7 @@ def test_merge_overlapping_speakers():
         (3.0, 10.0, "SPEAKER_01"),
     ]
     merged = _merge_transcription_and_diarization(transcription, diarization)
-    assert merged[0].speaker == "Speaker 2"  # SPEAKER_01 has more overlap (7s vs 3s)
+    assert merged[0].speaker == "Speaker 02"  # SPEAKER_01 has more overlap (7s vs 3s)
 
 
 def test_select_device_auto():

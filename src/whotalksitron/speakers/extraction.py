@@ -137,7 +137,10 @@ def extract_samples_for_speakers(
 
 
 def _safe_dirname(speaker: str) -> str:
-    return speaker.lower().replace(" ", "-")
+    safe = speaker.lower().replace(" ", "-")
+    if ".." in safe or "/" in safe or "\\" in safe:
+        raise ValueError(f"Invalid speaker name for directory: {speaker!r}")
+    return safe
 
 
 def _format_time(seconds: float) -> str:

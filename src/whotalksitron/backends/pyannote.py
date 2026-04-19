@@ -24,7 +24,7 @@ class PyAnnoteBackend:
         progress: ProgressCallback | None = None,
     ) -> TranscriptResult:
         import torch
-        import whisper  # type: ignore[import-untyped]
+        from faster_whisper import WhisperModel
         from pyannote.audio import Pipeline as DiarizationPipeline
 
         audio_path = Path(audio_path)
@@ -34,22 +34,24 @@ class PyAnnoteBackend:
         if progress:
             progress.update("transcribe", 0, "loading Whisper model")
 
-        whisper_model = whisper.load_model(
+        compute_type = "float16" if device != "cpu" else "int8"
+        whisper_model = WhisperModel(
             self._config.pyannote_whisper_model,
             device=device,
+            compute_type=compute_type,
         )
 
         if progress:
             progress.update("transcribe", 20, "transcribing audio")
 
-        whisper_result = whisper_model.transcribe(str(audio_path))
+        segments_iter, _info = whisper_model.transcribe(str(audio_path))
         transcription = [
             TranscriptSegment(
-                start=seg["start"],
-                end=seg["end"],
-                text=seg["text"].strip(),
+                start=seg.start,
+                end=seg.end,
+                text=seg.text.strip(),
             )
-            for seg in whisper_result.get("segments", [])
+            for seg in segments_iter
         ]
 
         if progress:
@@ -92,7 +94,7 @@ class PyAnnoteBackend:
 
             raw_speakers = sorted(set(s for _, _, s in diarization_regions))
             speaker_map = {
-                raw: f"Speaker {i + 1}" for i, raw in enumerate(raw_speakers)
+                raw: f"Speaker {i + 1:02d}" for i, raw in enumerate(raw_speakers)
             }
             for raw_name, mapped_name in speaker_map.items():
                 regions = [(s, e) for s, e, sp in diarization_regions if sp == raw_name]
@@ -106,17 +108,19 @@ class PyAnnoteBackend:
                         suffix=".wav", delete=False
                     ) as tmp:
                         clip_path = Path(tmp.name)
-                    extract_audio_clip(
-                        audio_path,
-                        clip_path,
-                        start=longest[0],
-                        duration=longest[1] - longest[0],
-                    )
-                    emb = emb_inference(str(clip_path))
-                    import numpy as np
+                    try:
+                        extract_audio_clip(
+                            audio_path,
+                            clip_path,
+                            start=longest[0],
+                            duration=longest[1] - longest[0],
+                        )
+                        emb = emb_inference(str(clip_path))
+                        import numpy as np
 
-                    speaker_embeddings[mapped_name] = np.array(emb).flatten()
-                    clip_path.unlink(missing_ok=True)
+                        speaker_embeddings[mapped_name] = np.array(emb).flatten()
+                    finally:
+                        clip_path.unlink(missing_ok=True)
 
         return TranscriptResult(
             segments=segments,
@@ -134,6 +138,7 @@ class PyAnnoteBackend:
 
     def is_available(self) -> bool:
         try:
+            import faster_whisper  # noqa: F401
             import pyannote.audio  # noqa: F401
             import torch  # noqa: F401
 
@@ -150,7 +155,7 @@ def _merge_transcription_and_diarization(
         return []
 
     raw_speakers = sorted(set(s for _, _, s in diarization))
-    speaker_map = {raw: f"Speaker {i + 1}" for i, raw in enumerate(raw_speakers)}
+    speaker_map = {raw: f"Speaker {i + 1:02d}" for i, raw in enumerate(raw_speakers)}
 
     merged: list[TranscriptSegment] = []
     for seg in transcription:

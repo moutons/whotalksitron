@@ -344,7 +344,6 @@ def extract_samples_cmd(ctx, audio_file, podcast, output):
         click.echo("\nTo enroll unmatched speakers:")
         for speaker in unmatched:
             safe = speaker.lower().replace(" ", "-")
-            first_clip = extracted[speaker][0] if extracted[speaker] else "sample.wav"  # noqa: F841
             click.echo(
                 f"  whotalksitron enroll --name NAME --podcast {podcast} "
                 f"--sample {output_dir}/{safe}/sample-001.wav"

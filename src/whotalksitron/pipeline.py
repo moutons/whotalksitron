@@ -212,11 +212,12 @@ class Pipeline:
 def validate_audio(path: Path) -> dict:
     if not path.exists():
         raise ValidationError(f"Audio file not found: {path}")
-    if path.stat().st_size == 0:
+    stat = path.stat()
+    if stat.st_size == 0:
         raise ValidationError(f"Audio file is empty: {path}")
     return {
         "path": path,
-        "size_bytes": path.stat().st_size,
+        "size_bytes": stat.st_size,
         "suffix": path.suffix,
     }
 

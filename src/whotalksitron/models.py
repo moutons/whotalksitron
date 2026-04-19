@@ -42,7 +42,7 @@ class TranscriptResult:
 
     @property
     def unmatched_speakers(self) -> set[str]:
-        pattern = re.compile(r"^Speaker \d{2,}$")
+        pattern = re.compile(r"^Speaker \d+$")
         return {s for s in self.speakers if pattern.match(s)}
 
 
