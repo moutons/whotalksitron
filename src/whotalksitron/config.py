@@ -17,6 +17,8 @@ class Config:
 
     gemini_api_key: str = ""
     gemini_use_adc: bool = False
+    gemini_project: str = ""
+    gemini_location: str = ""
     gemini_model: str = "gemini-2.5-flash"
     gemini_keychain_account: str = "vertex"
     gemini_keychain_service: str = "vertex-apikey"
@@ -67,6 +69,10 @@ class Config:
             cfg.gemini_api_key = gemini["api_key"]
         if "use_adc" in gemini:
             cfg.gemini_use_adc = gemini["use_adc"]
+        if "project" in gemini:
+            cfg.gemini_project = gemini["project"]
+        if "location" in gemini:
+            cfg.gemini_location = gemini["location"]
         if "model" in gemini:
             cfg.gemini_model = gemini["model"]
         if "keychain_account" in gemini:
@@ -113,6 +119,10 @@ class Config:
         masked_key = _mask_secret(self.gemini_api_key)
         lines.append(f"gemini.api_key = {masked_key!r}")
         lines.append(f"gemini.use_adc = {self.gemini_use_adc!r}")
+        if self.gemini_project:
+            lines.append(f"gemini.project = {self.gemini_project!r}")
+        if self.gemini_location:
+            lines.append(f"gemini.location = {self.gemini_location!r}")
         lines.append(f"gemini.model = {self.gemini_model!r}")
 
         lines.append(f"pyannote.whisper_model = {self.pyannote_whisper_model!r}")
@@ -134,6 +144,8 @@ class Config:
             "gemini": {
                 "api_key": "",
                 "use_adc": False,
+                "project": "",
+                "location": "",
                 "model": self.gemini_model,
                 "keychain_account": self.gemini_keychain_account,
                 "keychain_service": self.gemini_keychain_service,
@@ -173,15 +185,22 @@ def load_config(
     if not cfg.gemini_api_key:
         cfg.gemini_api_key = _resolve_secret(cfg) or ""
 
-    env_map = {
+    str_env_map = {
         "GEMINI_API_KEY": "gemini_api_key",
+        "GOOGLE_CLOUD_API_KEY": "gemini_api_key",
+        "GOOGLE_CLOUD_PROJECT": "gemini_project",
+        "GOOGLE_CLOUD_LOCATION": "gemini_location",
         "WHOTALKSITRON_BACKEND": "backend",
         "WHOTALKSITRON_LOG_LEVEL": "log_level",
     }
-    for env_var, attr in env_map.items():
+    for env_var, attr in str_env_map.items():
         val = os.environ.get(env_var)
         if val is not None:
             setattr(cfg, attr, val)
+
+    vertexai_env = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI")
+    if vertexai_env is not None:
+        cfg.gemini_use_adc = vertexai_env.lower() in ("1", "true", "yes")
 
     for key, val in cli_overrides.items():
         if val is not None and hasattr(cfg, key):

@@ -47,7 +47,7 @@ class GeminiBackend:
             response = retry_with_backoff(
                 lambda: client.models.generate_content(
                     model=self._config.gemini_model,
-                    contents=[*contents, prompt],  # type: ignore[arg-type]
+                    contents=[*contents, prompt],
                 ),
                 retries=3,
                 base_delay=2.0,
@@ -90,6 +90,12 @@ class GeminiBackend:
         return bool(self._config.gemini_api_key or self._config.gemini_use_adc)
 
     def _make_client(self) -> genai.Client:
+        if self._config.gemini_use_adc:
+            return genai.Client(
+                vertexai=True,
+                project=self._config.gemini_project or None,
+                location=self._config.gemini_location or None,
+            )
         if self._config.gemini_api_key:
             return genai.Client(api_key=self._config.gemini_api_key)
         return genai.Client()

@@ -37,7 +37,7 @@ clean:
 # --- CI sub-recipes (hidden from `just --list`) ---
 
 _ci_mdlint:
-    npx --yes markdownlint-cli2 "**/*.md" "#node_modules" "#.venv" "#.pytest_cache"
+    npx --yes markdownlint-cli2 "**/*.md" "#node_modules" "#.venv" "#.pytest_cache" "#.private-journal"
 
 _ci_lint:
     uv run ruff check .

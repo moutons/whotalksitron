@@ -48,6 +48,9 @@ select = ["E", "F", "I", "S", "UP", "B", "SIM", "RUF"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.ty.rules]
+unresolved-import = "ignore"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/whotalksitron"]
 
