@@ -11,6 +11,8 @@ from whotalksitron import __version__
 from whotalksitron.config import Config, load_config
 from whotalksitron.progress import ProgressReporter
 
+logger = logging.getLogger(__name__)
+
 
 def _setup_logging(level: str, fmt: str) -> None:
     numeric = getattr(logging, level.upper(), logging.INFO)
@@ -54,6 +56,12 @@ def main(ctx: click.Context, log_level, log_format, progress, quiet) -> None:
     if log_format:
         ctx.obj["cli_overrides"]["log_format"] = log_format
 
+    # Set up logging early so config loading is visible at debug level.
+    # Re-apply after config is loaded in case the config file sets a level.
+    early_level = log_level or "info"
+    early_format = log_format or "text"
+    _setup_logging(early_level, early_format)
+
     config_path = os.environ.get("WHOTALKSITRON_CONFIG")
     cfg = load_config(
         config_path=Path(config_path) if config_path else None,
@@ -62,7 +70,8 @@ def main(ctx: click.Context, log_level, log_format, progress, quiet) -> None:
 
     effective_level = log_level or cfg.log_level
     effective_format = log_format or cfg.log_format
-    _setup_logging(effective_level, effective_format)
+    if effective_level != early_level or effective_format != early_format:
+        _setup_logging(effective_level, effective_format)
 
     ctx.obj["config"] = cfg
     ctx.obj["progress"] = progress or cfg.progress
@@ -77,7 +86,10 @@ def main(ctx: click.Context, log_level, log_format, progress, quiet) -> None:
 @click.option("--model", default=None)
 @click.option("--identify-speakers", is_flag=True, default=False)
 @click.option(
-    "--overwrite", "-f", is_flag=True, default=False,
+    "--overwrite",
+    "-f",
+    is_flag=True,
+    default=False,
     help="Overwrite output file if it exists.",
 )
 @click.pass_context

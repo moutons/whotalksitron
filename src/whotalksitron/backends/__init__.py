@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from whotalksitron.config import Config
 from whotalksitron.models import SpeakerPool, TranscriptResult
 from whotalksitron.progress import ProgressCallback
+
+logger = logging.getLogger(__name__)
 
 
 class BackendUnavailableError(Exception):
@@ -31,18 +34,24 @@ class Backend(Protocol):
 
 def select_backend(config: Config) -> Backend:
     if config.backend != "auto":
+        logger.debug("Backend explicitly set to %r", config.backend)
         backend = _create_backend(config.backend, config)
         if not backend.is_available():
             msg = _unavailable_message(config.backend, backend)
             raise BackendUnavailableError(msg)
+        logger.info("Using backend: %s", config.backend)
         return backend
 
+    logger.debug("Auto-selecting backend")
     for name in ("gemini", "pyannote", "whisper"):
         try:
             backend = _create_backend(name, config)
             if backend.is_available():
+                logger.info("Auto-selected backend: %s", name)
                 return backend
+            logger.debug("Backend %s not available", name)
         except BackendUnavailableError:
+            logger.debug("Backend %s unavailable", name)
             continue
 
     raise BackendUnavailableError(

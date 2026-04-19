@@ -33,8 +33,19 @@ def match_speakers(
     threshold: float,
 ) -> TranscriptResult:
     if not speaker_embeddings.enrolled or not speaker_embeddings.detected:
+        logger.debug(
+            "No embeddings to match (enrolled=%d, detected=%d)",
+            len(speaker_embeddings.enrolled),
+            len(speaker_embeddings.detected),
+        )
         return result
 
+    logger.debug(
+        "Matching %d detected speakers against %d enrolled (threshold=%.2f)",
+        len(speaker_embeddings.detected),
+        len(speaker_embeddings.enrolled),
+        threshold,
+    )
     label_map: dict[str, str] = {}
     for detected_name, detected_emb in speaker_embeddings.detected.items():
         best_name: str | None = None
@@ -62,6 +73,7 @@ def match_speakers(
             )
 
     if not label_map:
+        logger.info("No speakers matched above threshold %.2f", threshold)
         return result
 
     new_segments = []

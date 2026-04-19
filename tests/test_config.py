@@ -1,8 +1,27 @@
 from pathlib import Path
 
+import pytest
 import tomli_w
 
 from whotalksitron.config import Config, load_config
+
+_CONFIG_ENV_VARS = [
+    "GEMINI_API_KEY",
+    "GOOGLE_CLOUD_API_KEY",
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_CLOUD_LOCATION",
+    "GOOGLE_CLOUD_STORAGE_BUCKET",
+    "GOOGLE_GENAI_USE_VERTEXAI",
+    "WHOTALKSITRON_BACKEND",
+    "WHOTALKSITRON_LOG_LEVEL",
+    "WHOTALKSITRON_CONFIG",
+]
+
+
+@pytest.fixture(autouse=True)
+def _clean_env(monkeypatch):
+    for var in _CONFIG_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
 
 
 def test_default_config():

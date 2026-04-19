@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 import tomli_w
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -108,7 +111,9 @@ class Config:
     @classmethod
     def from_file(cls, path: Path) -> Config:
         if not path.exists():
+            logger.debug("No config file at %s, using defaults", path)
             return cls()
+        logger.debug("Loading config from %s", path)
         with open(path, "rb") as f:
             data = tomllib.load(f)
         return cls.from_dict(data)
@@ -203,11 +208,20 @@ def load_config(
     for env_var, attr in str_env_map.items():
         val = os.environ.get(env_var)
         if val is not None:
+            if attr == "gemini_api_key":
+                logger.debug("Setting %s from %s", attr, env_var)
+            else:
+                logger.debug("Setting %s=%s from %s", attr, val, env_var)
             setattr(cfg, attr, val)
 
     vertexai_env = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI")
     if vertexai_env is not None:
         cfg.gemini_use_adc = vertexai_env.lower() in ("1", "true", "yes")
+        logger.debug(
+            "Setting gemini_use_adc=%s from GOOGLE_GENAI_USE_VERTEXAI=%s",
+            cfg.gemini_use_adc,
+            vertexai_env,
+        )
 
     for key, val in cli_overrides.items():
         if val is not None and hasattr(cfg, key):
@@ -217,18 +231,8 @@ def load_config(
 
 
 def _resolve_secret(cfg: Config) -> str | None:
-    """Try to retrieve API key from macOS Keychain or 1Password CLI.
-
-    Precedence:
-    1. macOS Keychain (security find-generic-password)
-    2. 1Password CLI (op read)
-    """
-    import logging
     import subprocess
 
-    logger = logging.getLogger(__name__)
-
-    # macOS Keychain
     keychain_account = cfg.gemini_keychain_account
     keychain_service = cfg.gemini_keychain_service
     try:
@@ -254,10 +258,17 @@ def _resolve_secret(cfg: Config) -> str | None:
                 keychain_account,
             )
             return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+        logger.debug(
+            "Keychain lookup returned %d for %s/%s",
+            result.returncode,
+            keychain_service,
+            keychain_account,
+        )
+    except FileNotFoundError:
+        logger.debug("security command not found, skipping Keychain")
+    except subprocess.TimeoutExpired:
+        logger.debug("Keychain lookup timed out")
 
-    # 1Password CLI
     op_ref = cfg.gemini_op_reference or None
     if op_ref:
         try:
@@ -271,8 +282,11 @@ def _resolve_secret(cfg: Config) -> str | None:
             if result.returncode == 0 and result.stdout.strip():
                 logger.debug("API key loaded from 1Password")
                 return result.stdout.strip()
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
+            logger.debug("1Password lookup returned %d", result.returncode)
+        except FileNotFoundError:
+            logger.debug("op command not found, skipping 1Password")
+        except subprocess.TimeoutExpired:
+            logger.debug("1Password lookup timed out")
 
     return None
 

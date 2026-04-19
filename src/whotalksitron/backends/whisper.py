@@ -67,6 +67,11 @@ class WhisperBackend:
                 "after 3 retries. Is Ollama/LM Studio running?"
             ) from exc
 
+        logger.debug(
+            "Whisper response: %d %s",
+            response.status_code,
+            response.reason_phrase,
+        )
         if progress:
             progress.update("transcribe", 80, "parsing response")
         data = response.json()
@@ -105,7 +110,11 @@ def _parse_whisper_response(data: dict) -> list[TranscriptSegment]:
     if raw_segments is None:
         text = data.get("text", "").strip()
         if not text:
+            logger.warning("Whisper response has no segments and no text")
             return []
+        logger.warning(
+            "Whisper response has no segments, using full text as single segment"
+        )
         return [TranscriptSegment(start=0.0, end=0.0, text=text)]
 
     segments: list[TranscriptSegment] = []

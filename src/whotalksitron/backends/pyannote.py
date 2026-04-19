@@ -35,6 +35,11 @@ class PyAnnoteBackend:
             progress.update("transcribe", 0, "loading Whisper model")
 
         compute_type = "float16" if device != "cpu" else "int8"
+        logger.info(
+            "Loading Whisper model %s (compute=%s)",
+            self._config.pyannote_whisper_model,
+            compute_type,
+        )
         whisper_model = WhisperModel(
             self._config.pyannote_whisper_model,
             device=device,
@@ -44,6 +49,7 @@ class PyAnnoteBackend:
         if progress:
             progress.update("transcribe", 20, "transcribing audio")
 
+        logger.debug("Starting Whisper transcription of %s", audio_path.name)
         segments_iter, _info = whisper_model.transcribe(str(audio_path))
         transcription = [
             TranscriptSegment(
@@ -60,6 +66,10 @@ class PyAnnoteBackend:
         if progress:
             progress.update("diarize", 0, "loading diarization model")
 
+        logger.info(
+            "Loading diarization model %s",
+            self._config.pyannote_diarization_model,
+        )
         diarization_pipeline = DiarizationPipeline.from_pretrained(
             self._config.pyannote_diarization_model,
         )
@@ -69,6 +79,7 @@ class PyAnnoteBackend:
         if progress:
             progress.update("diarize", 30, "diarizing audio")
 
+        logger.debug("Starting diarization of %s", audio_path.name)
         diarization_result = diarization_pipeline(str(audio_path))
 
         diarization_regions = [
@@ -89,6 +100,7 @@ class PyAnnoteBackend:
         if speakers:
             from pyannote.audio import Inference, Model
 
+            logger.info("Loading speaker embedding model")
             emb_model = Model.from_pretrained("pyannote/wespeaker-voxceleb-resnet34-LM")
             emb_inference = Inference(emb_model, window="whole")
 
@@ -202,6 +214,7 @@ def _find_majority_speaker(
 
 def _select_device(device_config: str) -> str:
     if device_config != "auto":
+        logger.debug("Using configured device: %s", device_config)
         return device_config
     try:
         import torch
@@ -211,5 +224,5 @@ def _select_device(device_config: str) -> str:
         if torch.cuda.is_available():
             return "cuda"
     except (ImportError, AttributeError):
-        pass
+        logger.debug("torch not available for device detection, using CPU")
     return "cpu"

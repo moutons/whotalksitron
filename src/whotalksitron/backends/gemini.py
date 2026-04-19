@@ -91,13 +91,20 @@ class GeminiBackend:
 
     def _make_client(self) -> genai.Client:
         if self._config.gemini_use_adc:
+            logger.debug(
+                "Creating Vertex AI client (project=%s, location=%s)",
+                self._config.gemini_project or "(default)",
+                self._config.gemini_location or "(default)",
+            )
             return genai.Client(
                 vertexai=True,
                 project=self._config.gemini_project or None,
                 location=self._config.gemini_location or None,
             )
         if self._config.gemini_api_key:
+            logger.debug("Creating Gemini client with API key")
             return genai.Client(api_key=self._config.gemini_api_key)
+        logger.debug("Creating Gemini client with default credentials")
         return genai.Client()
 
     def _build_contents(
@@ -159,10 +166,11 @@ def _build_prompt(speakers: SpeakerPool | None) -> str:
 def _parse_response(text: str) -> list[TranscriptSegment]:
     pattern = re.compile(
         r"\[(\d{1,2}:\d{2}:\d{2})\]\s*"
-        r"(?:((?:(?:Speaker\s+\d+)|(?:[A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2}))):\s+(?=[A-Z]))?"
+        r"(?:((?:Speaker\s+\d+)|(?:[A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})):\s+(?=[A-Z]))?"
         r"(.+)"
     )
     segments: list[TranscriptSegment] = []
+    skipped = 0
 
     for line in text.strip().split("\n"):
         line = line.strip()
@@ -170,6 +178,7 @@ def _parse_response(text: str) -> list[TranscriptSegment]:
             continue
         match = pattern.match(line)
         if not match:
+            skipped += 1
             logger.debug("Skipping unparseable line: %s", line)
             continue
 
@@ -184,6 +193,21 @@ def _parse_response(text: str) -> list[TranscriptSegment]:
                 text=content.strip(),
                 speaker=speaker,
             )
+        )
+
+    if not segments and text.strip():
+        preview = text[:500]
+        logger.warning(
+            "Gemini returned %d chars but no lines matched the "
+            "expected transcript format. Response preview:\n%s",
+            len(text),
+            preview,
+        )
+    elif skipped > 0:
+        logger.debug(
+            "Parsed %d segments, skipped %d unparseable lines",
+            len(segments),
+            skipped,
         )
 
     for i in range(len(segments) - 1):
@@ -244,6 +268,7 @@ def _upload_to_gcs(path: Path, mime: str, config: Config) -> types.Part:
         path.stat().st_size,
     )
     blob.upload_from_filename(str(path), content_type=mime)
+    logger.info("Upload complete: %s", gcs_uri)
     return types.Part.from_uri(file_uri=gcs_uri, mime_type=mime)
 
 

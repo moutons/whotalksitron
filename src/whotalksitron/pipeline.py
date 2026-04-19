@@ -61,6 +61,7 @@ class Pipeline:
 
         # Stage 2: Preprocess
         processed_path = audio_path
+        logger.debug("Checking if conversion needed for %s", audio_path.suffix)
         if self._needs_conversion(audio_path, backend):
             if not check_ffmpeg():
                 raise PreprocessingError(
@@ -80,6 +81,16 @@ class Pipeline:
             speakers=speakers,
             progress=progress,
         )
+
+        if not transcript.segments:
+            logger.warning(
+                "Backend returned no transcript segments. "
+                "The response may have been empty or in an unexpected format."
+            )
+            warnings.append(
+                "No transcript segments were produced. "
+                "Try --log-level debug for details."
+            )
 
         # Stage 4: Voiceprint matching
         if speakers and speakers.speakers:

@@ -45,8 +45,10 @@ class SpeakerStore:
             )
         dest = self._speaker_dir(to_podcast, name)
         if dest.exists():
+            logger.info("Replacing existing speaker %s in %s", name, to_podcast)
             shutil.rmtree(dest)
         shutil.copytree(src, dest)
+        logger.debug("Copied speaker data %s -> %s", src, dest)
 
         meta = self.get_meta(name, to_podcast)
         meta["podcast"] = to_podcast
@@ -103,7 +105,8 @@ class SpeakerStore:
         except Exception:
             logger.warning(
                 "No embedding model available. Enroll succeeded but "
-                "embedding not computed. Install pyannote for voiceprint matching."
+                "embedding not computed. Install pyannote for voiceprint matching.",
+                exc_info=True,
             )
             return
 
@@ -113,7 +116,11 @@ class SpeakerStore:
                 emb = computer.compute(sample)
                 embeddings.append(emb)
             except Exception:
-                logger.warning("Failed to compute embedding for %s", sample)
+                logger.warning(
+                    "Failed to compute embedding for %s",
+                    sample,
+                    exc_info=True,
+                )
 
         if embeddings:
             avg = average_embeddings(embeddings)
