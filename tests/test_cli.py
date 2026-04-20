@@ -239,6 +239,25 @@ def test_config_set(runner, tmp_path):
     assert data["gemini"]["model"] == "gemini-2.5-pro"
 
 
+def test_config_init_includes_logging(runner, tmp_path):
+    config_file = tmp_path / "config.toml"
+    result = runner.invoke(
+        main,
+        ["config", "--init"],
+        env={"WHOTALKSITRON_CONFIG": str(config_file)},
+    )
+    assert result.exit_code == 0
+
+    import tomllib
+
+    with open(config_file, "rb") as f:
+        data = tomllib.load(f)
+    assert "logging" in data
+    assert "file" in data["logging"]
+    assert "file_max_bytes" in data["logging"]
+    assert "file_backup_count" in data["logging"]
+
+
 def test_transcribe_identify_speakers_flag(runner):
     result = runner.invoke(main, ["transcribe", "--help"])
     assert "--identify-speakers" in result.output
