@@ -32,15 +32,6 @@
           }
         ]
       }
-    },
-    {
-      "type": "commit_message_pattern",
-      "parameters": {
-        "name": "Conventional Commits",
-        "operator": "regex",
-        "pattern": "^(feat|fix|perf|refactor|docs|style|test|build|ci|chore)(\\(.+\\))?(!)?: .+",
-        "negate": false
-      }
     }
   ]
 }
