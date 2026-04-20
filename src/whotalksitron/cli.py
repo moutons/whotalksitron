@@ -14,9 +14,19 @@ from whotalksitron.progress import ProgressReporter
 logger = logging.getLogger(__name__)
 
 
+_CONSOLE_HANDLER_NAME = "whotalksitron_console"
+
+
 def _setup_logging(level: str, fmt: str) -> None:
     numeric = getattr(logging, level.upper(), logging.INFO)
+
+    # Remove only the console handler, preserve file and other handlers
+    for h in logging.root.handlers[:]:
+        if h.get_name() == _CONSOLE_HANDLER_NAME:
+            logging.root.removeHandler(h)
+
     handler = logging.StreamHandler(sys.stderr)
+    handler.set_name(_CONSOLE_HANDLER_NAME)
     if fmt == "json":
         import json
 
@@ -33,7 +43,6 @@ def _setup_logging(level: str, fmt: str) -> None:
         handler.setFormatter(JsonFormatter())
     else:
         handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
-    logging.root.handlers.clear()
     logging.root.addHandler(handler)
     logging.root.setLevel(numeric)
 

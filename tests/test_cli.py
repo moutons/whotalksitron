@@ -172,3 +172,29 @@ def test_extract_samples_help(runner):
     assert result.exit_code == 0
     assert "--podcast" in result.output
     assert "--output" in result.output
+
+
+def test_setup_logging_preserves_non_console_handlers():
+    """_setup_logging must only replace the console handler, not clear all handlers."""
+    import logging
+
+    from whotalksitron.cli import _setup_logging
+
+    # Add a dummy file-like handler
+    dummy = logging.FileHandler("/dev/null")
+    dummy.set_name("file_log")
+    logging.root.addHandler(dummy)
+
+    try:
+        _setup_logging("info", "text")
+
+        handler_names = [h.get_name() for h in logging.root.handlers]
+        assert "file_log" in handler_names, "File handler was removed by _setup_logging"
+        assert any(
+            isinstance(h, logging.StreamHandler)
+            and not isinstance(h, logging.FileHandler)
+            for h in logging.root.handlers
+        ), "Console handler not present"
+    finally:
+        logging.root.removeHandler(dummy)
+        dummy.close()
