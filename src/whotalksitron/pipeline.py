@@ -192,10 +192,12 @@ class Pipeline:
                 progress.stage_complete("voiceprint", "no embeddings found")
             return transcript
 
-        raw_detected = transcript.metadata.get("speaker_embeddings", {})
-        detected: dict[str, np.ndarray] = (  # type: ignore[assignment]
-            raw_detected if isinstance(raw_detected, dict) else {}
-        )
+        raw_detected = transcript.metadata.get("speaker_embeddings")
+        detected: dict[str, np.ndarray] = {}
+        if isinstance(raw_detected, dict):
+            for k, v in raw_detected.items():
+                if isinstance(k, str) and isinstance(v, np.ndarray):
+                    detected[k] = v
 
         if not detected:
             logger.info(
