@@ -24,7 +24,7 @@ dependencies = [
 local = [
     "torch>=2.2,<3",
     "torchaudio>=2.2,<3",
-    "pyannote.audio>=3.1,<4",
+    "pyannote.audio>=3.1,<5",
     "faster-whisper>=1.1,<2",
 ]
 dev = [
