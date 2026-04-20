@@ -164,10 +164,16 @@ def _build_prompt(speakers: SpeakerPool | None) -> str:
 
 
 def _parse_response(text: str) -> list[TranscriptSegment]:
+    _TS_HMS = r"\[(\d{1,2}:\d{2}:\d{2})\]"
+    _TS_MS = r"\[\s*(\d+m\d+s\d+ms)\s*\]"
+    _SPEAKER = (
+        r"(?:(?P<speaker>Speaker\s+\d+):\s+"
+        r"|(?P<named>[A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})"
+        r":\s+(?=[A-Z]))?"
+    )
+    _TEXT = r"(?P<text>.+)"
     pattern = re.compile(
-        r"\[(\d{1,2}:\d{2}:\d{2})\]\s*"
-        r"(?:((?:Speaker\s+\d+)|(?:[A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})):\s+(?=[A-Z]))?"
-        r"(.+)"
+        rf"(?:{_TS_HMS}|{_TS_MS})\s*{_SPEAKER}{_TEXT}"
     )
     segments: list[TranscriptSegment] = []
     skipped = 0
@@ -182,9 +188,9 @@ def _parse_response(text: str) -> list[TranscriptSegment]:
             logger.debug("Skipping unparseable line: %s", line)
             continue
 
-        timestamp_str, speaker, content = match.groups()
-        seconds = _parse_timestamp(timestamp_str)
-        speaker = speaker.strip() if speaker else None
+        seconds = _parse_timestamp(match.group(1) or match.group(2))
+        speaker = match.group("speaker") or match.group("named")
+        content = match.group("text")
 
         segments.append(
             TranscriptSegment(
@@ -229,15 +235,31 @@ def _parse_response(text: str) -> list[TranscriptSegment]:
     return segments
 
 
+_MS_PATTERN = re.compile(r"(\d+)m(\d+)s(\d+)ms")
+
+
 def _parse_timestamp(ts: str) -> float:
-    parts = ts.split(":")
-    if len(parts) != 3:
+    if ":" in ts:
+        parts = ts.split(":")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid timestamp format: {ts!r}")
+        try:
+            h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
+        except ValueError as exc:
+            raise ValueError(
+                f"Non-numeric timestamp components: {ts!r}"
+            ) from exc
+        return h * 3600.0 + m * 60.0 + s
+
+    match = _MS_PATTERN.match(ts)
+    if not match:
         raise ValueError(f"Invalid timestamp format: {ts!r}")
-    try:
-        h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
-    except ValueError as exc:
-        raise ValueError(f"Non-numeric timestamp components: {ts!r}") from exc
-    return h * 3600.0 + m * 60.0 + s
+    minutes, seconds, millis = (
+        int(match.group(1)),
+        int(match.group(2)),
+        int(match.group(3)),
+    )
+    return minutes * 60.0 + seconds + millis / 1000.0
 
 
 def _upload_to_gcs(path: Path, mime: str, config: Config) -> types.Part:

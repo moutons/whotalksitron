@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from whotalksitron.backends.gemini import GeminiBackend, _build_prompt, _parse_response
+from whotalksitron.backends.gemini import (
+    GeminiBackend,
+    _build_prompt,
+    _parse_response,
+    _parse_timestamp,
+)
 from whotalksitron.config import Config
 from whotalksitron.models import SpeakerPool
 
@@ -92,3 +97,52 @@ def test_parse_response_hour_timestamps():
     segments = _parse_response(response_text)
     assert segments[0].start == 5025.0
     assert segments[0].speaker == "Speaker 01"
+
+
+def test_parse_response_ms_timestamps():
+    response_text = (
+        "[ 0m0s421ms ] Speaker 01: Welcome to the show.\n"
+        "[ 0m11s642ms ] Speaker 02: Thanks for having me.\n"
+        "[ 46m40s279ms ] Speaker 01: That wraps it up.\n"
+    )
+    segments = _parse_response(response_text)
+    assert len(segments) == 3
+    assert segments[0].speaker == "Speaker 01"
+    assert segments[0].text == "Welcome to the show."
+    assert abs(segments[0].start - 0.421) < 0.001
+    assert segments[1].speaker == "Speaker 02"
+    assert abs(segments[1].start - 11.642) < 0.001
+    assert segments[2].speaker == "Speaker 01"
+    assert abs(segments[2].start - 2800.279) < 0.001
+
+
+def test_parse_timestamp_hms():
+    assert _parse_timestamp("0:00:00") == 0.0
+    assert _parse_timestamp("1:23:45") == 5025.0
+
+
+def test_parse_timestamp_ms_format():
+    assert abs(_parse_timestamp("0m0s421ms") - 0.421) < 0.001
+    assert abs(_parse_timestamp("4m59s336ms") - 299.336) < 0.001
+    assert abs(_parse_timestamp("46m40s279ms") - 2800.279) < 0.001
+
+
+def test_parse_response_mixed_formats():
+    response_text = (
+        "[00:00:05] Speaker 01: Using HMS format.\n"
+        "[ 0m15s106ms ] Speaker 02: Using ms format.\n"
+    )
+    segments = _parse_response(response_text)
+    assert len(segments) == 2
+    assert segments[0].start == 5.0
+    assert abs(segments[1].start - 15.106) < 0.001
+
+
+def test_parse_response_speaker_lowercase_text():
+    response_text = (
+        "[ 10m55s23ms ] Speaker 02: thanks for making my joke.\n"
+    )
+    segments = _parse_response(response_text)
+    assert len(segments) == 1
+    assert segments[0].speaker == "Speaker 02"
+    assert segments[0].text == "thanks for making my joke."
