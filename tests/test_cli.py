@@ -449,3 +449,76 @@ def test_setup_logging_preserves_non_console_handlers():
     finally:
         logging.root.removeHandler(dummy)
         dummy.close()
+
+
+def test_friendly_message_timeout_error():
+    from whotalksitron.cli import _friendly_message
+
+    msg = _friendly_message(TimeoutError("Operation timed out"))
+    assert "timed out" in msg
+    assert "network" in msg.lower()
+
+
+def test_friendly_message_runtime_error():
+    from whotalksitron.cli import _friendly_message
+
+    exc = RuntimeError("Gemini API failed after 3 retries. Check your API key.")
+    msg = _friendly_message(exc)
+    assert msg == "Gemini API failed after 3 retries. Check your API key."
+
+
+def test_friendly_message_import_error_pyannote():
+    from whotalksitron.cli import _friendly_message
+
+    exc = ImportError("No module named 'pyannote'")
+    msg = _friendly_message(exc)
+    assert "uv tool install" in msg
+
+
+def test_friendly_message_import_error_torch():
+    from whotalksitron.cli import _friendly_message
+
+    exc = ImportError("No module named 'torch'")
+    msg = _friendly_message(exc)
+    assert "uv tool install" in msg
+
+
+def test_friendly_message_os_error():
+    from whotalksitron.cli import _friendly_message
+
+    exc = OSError("Permission denied: '/tmp/test.wav'")
+    msg = _friendly_message(exc)
+    assert "Permission denied" in msg
+
+
+def test_friendly_message_unknown_exception():
+    from whotalksitron.cli import _friendly_message
+
+    exc = ValueError("something weird")
+    msg = _friendly_message(exc)
+    assert "something weird" in msg
+
+
+def test_friendly_message_gcs_error():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.api_core.exceptions import NotFound
+    except ImportError:
+        pytest.skip("google-cloud-storage not installed")
+
+    exc = NotFound("404 Bucket my-bucket not found")
+    msg = _friendly_message(exc)
+    assert "my-bucket" in msg
+
+
+def test_friendly_message_retry_exhausted_walks_cause():
+    from whotalksitron.cli import _friendly_message
+    from whotalksitron.retry import RetryExhausted
+
+    inner = TimeoutError("connection timed out")
+    exc = RetryExhausted("Failed after 3 retries: connection timed out")
+    exc.__cause__ = inner
+    msg = _friendly_message(exc)
+    assert "timed out" in msg
+    assert "network" in msg.lower()

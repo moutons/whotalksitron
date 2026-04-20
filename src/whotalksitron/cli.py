@@ -50,6 +50,120 @@ def _sanitize_argv(argv: list[str]) -> list[str]:
     return result
 
 
+def _friendly_message(exc: Exception) -> str:
+    # Walk cause chain for wrapped errors (RetryExhausted, etc.)
+    from whotalksitron.retry import RetryExhausted
+
+    if isinstance(exc, RetryExhausted) and exc.__cause__ is not None:
+        return _friendly_message(exc.__cause__)
+
+    # Gemini / Google Cloud errors
+    try:
+        from google.genai.errors import ClientError, ServerError
+
+        if isinstance(exc, ClientError):
+            code = getattr(exc, "status_code", 0) or 0
+            if code == 401:
+                return (
+                    "Authentication failed. Check your API key or run: "
+                    "gcloud auth application-default login"
+                )
+            if code == 404:
+                return f"Model not found. Check gemini.model in your config. ({exc})"
+            if code == 429:
+                return "Rate limited by Gemini API. Wait a moment and try again."
+            return f"Gemini API error ({code}): {exc}"
+        if isinstance(exc, ServerError):
+            code = getattr(exc, "status_code", 0) or 0
+            return f"Gemini API server error ({code}). Try again later."
+    except ImportError:
+        pass
+
+    try:
+        from google.auth.exceptions import DefaultCredentialsError, RefreshError
+
+        if isinstance(exc, DefaultCredentialsError):
+            return (
+                "No Google Cloud credentials found. Run: "
+                "gcloud auth application-default login"
+            )
+        if isinstance(exc, RefreshError):
+            return (
+                "Google Cloud credentials expired. Run: "
+                "gcloud auth application-default login"
+            )
+    except ImportError:
+        pass
+
+    # GCS errors
+    try:
+        from google.api_core.exceptions import GoogleAPIError
+
+        if isinstance(exc, GoogleAPIError):
+            msg = str(exc)
+            # Try to extract bucket name from the error message
+            bucket = ""
+            if "bucket" in msg.lower():
+                bucket = msg
+            if bucket:
+                return f"Failed to upload to GCS: {msg}"
+            return f"Google Cloud Storage error: {msg}"
+    except ImportError:
+        pass
+
+    # httpx errors
+    try:
+        import httpx
+
+        if isinstance(exc, httpx.ConnectError):
+            url = ""
+            req = getattr(exc, "request", None)
+            if req is not None:
+                url = str(getattr(req, "url", ""))
+            if url:
+                return f"Cannot connect to {url}. Check your network connection."
+            return "Cannot connect to server. Check your network connection."
+        if isinstance(exc, httpx.TimeoutException):
+            return "Request timed out. Check your network connection and try again."
+        if isinstance(exc, httpx.HTTPStatusError):
+            url = ""
+            req = getattr(exc, "request", None)
+            if req is not None:
+                url = str(getattr(req, "url", ""))
+            code = getattr(getattr(exc, "response", None), "status_code", "?")
+            if url:
+                return f"HTTP {code} from {url}."
+            return f"HTTP request failed with status {code}."
+    except ImportError:
+        pass
+
+    if isinstance(exc, TimeoutError):
+        return "Operation timed out. Check your network connection and try again."
+
+    if isinstance(exc, ImportError):
+        msg = str(exc)
+        if "pyannote" in msg or "torch" in msg:
+            return (
+                "Pyannote backend requires extra dependencies. Install: "
+                "uv tool install whotalksitron --with local"
+            )
+        return f"Missing dependency: {exc}"
+
+    if isinstance(exc, RuntimeError):
+        msg = str(exc)
+        if any(kw in msg.lower() for kw in ("cuda", "torch", "pyannote")):
+            return (
+                f"Pyannote error: {msg}. "
+                "Try --backend gemini or check device settings."
+            )
+        return msg
+
+    if isinstance(exc, OSError):
+        return str(exc)
+
+    return f"Unexpected error: {exc}"
+
+
 def _numeric_level(level: str) -> int:
     return getattr(logging, level.upper(), logging.INFO)
 
