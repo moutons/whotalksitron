@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from datetime import UTC
 from pathlib import Path
 
 import click
@@ -45,6 +46,92 @@ def _setup_logging(level: str, fmt: str) -> None:
         handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
     logging.root.addHandler(handler)
     logging.root.setLevel(numeric)
+
+
+_FILE_HANDLER_NAME = "whotalksitron_file"
+
+
+def _setup_file_logging(
+    log_file: str,
+    max_bytes: int,
+    backup_count: int,
+) -> logging.Handler | None:
+    if not log_file:
+        return None
+
+    import gzip
+    import json
+    import tempfile
+    from datetime import datetime
+    from logging.handlers import RotatingFileHandler
+
+    log_path = Path(log_file)
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(
+            f"Warning: cannot create log directory {log_path.parent}: {e}",
+            file=sys.stderr,
+        )
+        return None
+
+    try:
+        handler = RotatingFileHandler(
+            log_path,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+        )
+    except OSError as e:
+        print(f"Warning: cannot open log file {log_path}: {e}", file=sys.stderr)
+        return None
+
+    handler.set_name(_FILE_HANDLER_NAME)
+
+    def _namer(name: str) -> str:
+        return name + ".gz"
+
+    def _rotator(source: str, dest: str) -> None:
+        import contextlib
+
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".gz", dir=str(log_path.parent))
+        try:
+            with (
+                os.fdopen(tmp_fd, "wb") as tmp_f,
+                gzip.GzipFile(fileobj=tmp_f, mode="wb") as gz,
+                open(source, "rb") as src,
+            ):
+                while chunk := src.read(65536):
+                    gz.write(chunk)
+            os.replace(tmp_path, dest)
+        except Exception:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
+        os.unlink(source)
+
+    handler.namer = _namer
+    handler.rotator = _rotator
+
+    class FileJsonFormatter(logging.Formatter):
+        def format(self, record: logging.LogRecord) -> str:
+            data = {
+                "ts": datetime.fromtimestamp(record.created, tz=UTC).strftime(
+                    "%Y-%m-%dT%H:%M:%S.%f"
+                )[:-3]
+                + "Z",
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+            }
+            if hasattr(record, "argv"):
+                data["argv"] = record.argv
+            if hasattr(record, "version"):
+                data["version"] = record.version
+            return json.dumps(data)
+
+    handler.setFormatter(FileJsonFormatter())
+    handler.setLevel(logging.DEBUG)
+    return handler
 
 
 _GLOBAL_OPT_NAMES = ("log_level", "log_format", "progress", "quiet")

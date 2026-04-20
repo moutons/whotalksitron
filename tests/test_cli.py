@@ -1,3 +1,6 @@
+import gzip
+import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -172,6 +175,85 @@ def test_extract_samples_help(runner):
     assert result.exit_code == 0
     assert "--podcast" in result.output
     assert "--output" in result.output
+
+
+def test_file_handler_writes_json(tmp_path):
+    from whotalksitron.cli import _setup_file_logging
+
+    log_file = tmp_path / "test.log"
+    handler = _setup_file_logging(str(log_file), max_bytes=1_048_576, backup_count=3)
+    assert handler is not None
+
+    try:
+        test_logger = logging.getLogger("test.file_handler")
+        test_logger.setLevel(logging.DEBUG)
+        test_logger.addHandler(handler)
+        test_logger.debug("hello from test")
+        handler.flush()
+
+        lines = log_file.read_text().strip().split("\n")
+        assert len(lines) == 1
+        record = json.loads(lines[0])
+        assert record["level"] == "DEBUG"
+        assert record["logger"] == "test.file_handler"
+        assert record["message"] == "hello from test"
+        assert "ts" in record
+    finally:
+        test_logger.removeHandler(handler)
+        handler.close()
+
+
+def test_file_handler_returns_none_on_bad_path():
+    from whotalksitron.cli import _setup_file_logging
+
+    handler = _setup_file_logging(
+        "/no/such/dir/test.log", max_bytes=1_048_576, backup_count=3
+    )
+    assert handler is None
+
+
+def test_file_handler_creates_parent_dir(tmp_path):
+    from whotalksitron.cli import _setup_file_logging
+
+    log_file = tmp_path / "subdir" / "nested" / "test.log"
+    handler = _setup_file_logging(str(log_file), max_bytes=1_048_576, backup_count=3)
+    assert handler is not None
+    assert log_file.parent.exists()
+    handler.close()
+
+
+def test_file_handler_gzip_rotation(tmp_path):
+    from whotalksitron.cli import _setup_file_logging
+
+    log_file = tmp_path / "test.log"
+    # Small max_bytes to trigger rotation
+    handler = _setup_file_logging(str(log_file), max_bytes=200, backup_count=2)
+    assert handler is not None
+
+    try:
+        test_logger = logging.getLogger("test.rotation")
+        test_logger.setLevel(logging.DEBUG)
+        test_logger.addHandler(handler)
+
+        for i in range(50):
+            test_logger.debug("rotation test line %d with padding to fill bytes", i)
+
+        handler.flush()
+
+        backup = tmp_path / "test.log.1.gz"
+        assert backup.exists(), f"Expected gzip backup at {backup}"
+        content = gzip.decompress(backup.read_bytes()).decode()
+        assert "rotation test line" in content
+    finally:
+        test_logger.removeHandler(handler)
+        handler.close()
+
+
+def test_file_handler_disabled_when_empty():
+    from whotalksitron.cli import _setup_file_logging
+
+    handler = _setup_file_logging("", max_bytes=1_048_576, backup_count=3)
+    assert handler is None
 
 
 def test_setup_logging_preserves_non_console_handlers():
