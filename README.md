@@ -39,7 +39,7 @@ whotalksitron enroll --name alice --podcast my-show --sample alice-sample.wav
 whotalksitron transcribe episode.mp3 --backend gemini --podcast my-show
 ```
 
-Output is written alongside the audio file as `episode.md` by default.
+Output is written alongside the audio file as `<stem>-transcript.md` by default. Use `--overwrite` / `-f` to replace an existing output file.
 
 ## Commands
 
@@ -53,8 +53,9 @@ whotalksitron transcribe AUDIO_FILE [OPTIONS]
 |---|---|
 | `--backend` | `gemini`, `pyannote`, or `whisper`. Defaults to auto-select. |
 | `--podcast NAME` | Load enrolled speakers for this podcast and run voiceprint matching. |
-| `--output PATH` | Output path. Defaults to audio file with `.md` extension. |
+| `--output PATH` / `-o` | Output path. Defaults to `<stem>-transcript.md` alongside the audio file. |
 | `--model NAME` | Override the model for the selected backend. |
+| `--overwrite` / `-f` | Overwrite output file if it exists. |
 | `--identify-speakers` | Force speaker identification even without enrolled voices. |
 
 ### `enroll`
@@ -148,6 +149,7 @@ Configuration is resolved in this order (later overrides earlier):
 [defaults]
 backend = "auto"        # auto, gemini, pyannote, whisper
 log_level = "info"
+log_format = "text"     # text or json
 progress = false
 
 [gemini]
@@ -157,6 +159,9 @@ project = ""            # GCP project (Vertex AI)
 location = ""           # GCP region (Vertex AI)
 gcs_bucket = ""         # GCS bucket for large files (Vertex AI)
 model = "gemini-2.5-flash"
+keychain_service = "vertex-apikey"  # macOS Keychain service name
+keychain_account = "vertex"         # macOS Keychain account name
+op_reference = ""                   # 1Password secret reference
 
 [pyannote]
 whisper_model = "large-v3"
@@ -192,9 +197,10 @@ Enrolled speaker data lives at `~/.config/whotalksitron/speakers/`. Each speaker
 ~/.config/whotalksitron/speakers/
   my-show/
     alice/
-      sample-001.wav
+      samples/
+        sample-<uuid>.wav
       embedding.npy
-      meta.json
+      meta.toml
 ```
 
 ## Development

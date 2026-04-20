@@ -87,10 +87,10 @@ whotalksitron enroll --name "Alice" --podcast my-show --sample any-existing.wav 
 ~/.config/whotalksitron/speakers/
   my-show/
     alice/
-      sample-001.wav   # original audio clips
-      sample-002.wav
-      embedding.npy    # averaged voiceprint embedding
-      meta.json        # sample count and metadata
+      samples/
+        sample-<uuid>.wav   # original audio clips
+      embedding.npy         # averaged voiceprint embedding
+      meta.toml             # sample count and metadata
 ```
 
 The directory can be changed with `WHOTALKSITRON_SPEAKERS_DIR`.
