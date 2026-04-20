@@ -4,7 +4,7 @@
 
 **Goal:** Replace raw tracebacks, third-party log noise, and shutdown crashes with friendly error messages on the console while preserving full diagnostics in the file log.
 
-**Architecture:** Three changes in `cli.py`: (1) a logging filter on the console handler that passes only `whotalksitron.*` loggers, (2) a top-level exception handler around `main()` that maps known exceptions to friendly messages and logs full tracebacks to the file log, (3) an `atexit` handler that cleans up the file handler before interpreter shutdown.
+**Architecture:** Three changes in `cli.py`: (1) a logging filter on the console handler that passes only `whotalksitron.*` loggers, (2) an `_entrypoint()` wrapper around `main()` that catches exceptions, maps them to friendly messages via `_friendly_message()`, and logs full tracebacks to the file log, (3) an `atexit` handler that cleans up the file handler before interpreter shutdown.
 
 **Tech Stack:** Python logging, click, atexit. No new dependencies.
 
@@ -244,6 +244,19 @@ def test_friendly_message_unknown_exception():
     assert "something weird" in msg
 
 
+def test_friendly_message_gcs_error():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.api_core.exceptions import NotFound
+    except ImportError:
+        pytest.skip("google-cloud-storage not installed")
+
+    exc = NotFound("404 Bucket my-bucket not found")
+    msg = _friendly_message(exc)
+    assert "my-bucket" in msg
+
+
 def test_friendly_message_retry_exhausted_walks_cause():
     from whotalksitron.cli import _friendly_message
     from whotalksitron.retry import RetryExhausted
@@ -308,6 +321,22 @@ def _friendly_message(exc: Exception) -> str:
                 "Google Cloud credentials expired. Run: "
                 "gcloud auth application-default login"
             )
+    except ImportError:
+        pass
+
+    # GCS errors
+    try:
+        from google.api_core.exceptions import GoogleAPIError
+
+        if isinstance(exc, GoogleAPIError):
+            msg = str(exc)
+            # Try to extract bucket name from the error message
+            bucket = ""
+            if "bucket" in msg.lower():
+                bucket = msg
+            if bucket:
+                return f"Failed to upload to GCS: {msg}"
+            return f"Google Cloud Storage error: {msg}"
     except ImportError:
         pass
 
@@ -504,12 +533,12 @@ Expected: FAIL (no top-level handler yet, traceback shows in output)
 
 - [ ] **Step 3: Implement the top-level exception handler**
 
-In `src/whotalksitron/cli.py`, replace the `if __name__ == "__main__":` block at line 601-602 with a wrapped entry point. Also modify the `main` group to use `standalone_mode=False` in a wrapper:
+In `src/whotalksitron/cli.py`, replace the `if __name__ == "__main__":` block at line 601-602 with a wrapped entry point. The `main` Click group stays unchanged — `_entrypoint()` wraps it with `standalone_mode=False` to intercept exceptions:
 
 Add a new function after all command definitions (before `_speakers_dir`):
 
 ```python
-def _run() -> None:
+def _entrypoint() -> None:
     try:
         main(standalone_mode=False)
     except click.exceptions.Exit as e:
@@ -524,7 +553,7 @@ def _run() -> None:
         logger.exception("Unhandled exception")
         msg = _friendly_message(e)
         click.echo(f"Error: {msg}", err=True)
-        log_path = _active_log_file()
+        log_path = _current_log_path()
         if log_path:
             click.echo(f"Details: {log_path}", err=True)
         else:
@@ -532,7 +561,7 @@ def _run() -> None:
         sys.exit(1)
 
 
-def _active_log_file() -> str | None:
+def _current_log_path() -> str | None:
     for h in logging.root.handlers:
         if h.get_name() == _FILE_HANDLER_NAME:
             path = getattr(h, "baseFilename", None)
@@ -545,14 +574,14 @@ Update the `[project.scripts]` entry point. In `pyproject.toml`, change:
 
 ```toml
 [project.scripts]
-whotalksitron = "whotalksitron.cli:_run"
+whotalksitron = "whotalksitron.cli:_entrypoint"
 ```
 
 And update the `if __name__` block:
 
 ```python
 if __name__ == "__main__":
-    _run()
+    _entrypoint()
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -771,7 +800,7 @@ Check against `docs/superpowers/specs/2026-04-20-error-handling-design.md`:
 1. Console filter blocks third-party loggers ✓
 2. Invocation record at DEBUG ✓
 3. Top-level exception handler with friendly messages ✓
-4. All exception types from the spec's table have handlers ✓
+4. All exception types from the spec's table have handlers (including GCS) ✓
 5. `__cause__` chain walking for RetryExhausted ✓
 6. Log file path shown in error messages ✓
 7. atexit cleanup prevents shutdown crashes ✓
