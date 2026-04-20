@@ -145,7 +145,7 @@ def _setup_file_logging(
 
     class FileJsonFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
-            data = {
+            data: dict[str, object] = {
                 "ts": datetime.fromtimestamp(record.created, tz=UTC).strftime(
                     "%Y-%m-%dT%H:%M:%S.%f"
                 )[:-3]

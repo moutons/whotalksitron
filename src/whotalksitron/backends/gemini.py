@@ -172,9 +172,7 @@ def _parse_response(text: str) -> list[TranscriptSegment]:
         r":\s+(?=[A-Z]))?"
     )
     _TEXT = r"(?P<text>.+)"
-    pattern = re.compile(
-        rf"(?:{_TS_HMS}|{_TS_MS})\s*{_SPEAKER}{_TEXT}"
-    )
+    pattern = re.compile(rf"(?:{_TS_HMS}|{_TS_MS})\s*{_SPEAKER}{_TEXT}")
     segments: list[TranscriptSegment] = []
     skipped = 0
 
@@ -246,9 +244,7 @@ def _parse_timestamp(ts: str) -> float:
         try:
             h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
         except ValueError as exc:
-            raise ValueError(
-                f"Non-numeric timestamp components: {ts!r}"
-            ) from exc
+            raise ValueError(f"Non-numeric timestamp components: {ts!r}") from exc
         return h * 3600.0 + m * 60.0 + s
 
     match = _MS_PATTERN.match(ts)
@@ -263,7 +259,7 @@ def _parse_timestamp(ts: str) -> float:
 
 
 def _upload_to_gcs(path: Path, mime: str, config: Config) -> types.Part:
-    from google.cloud import storage  # type: ignore[import-untyped]
+    from google.cloud import storage
 
     bucket_name = config.gemini_gcs_bucket
     if not bucket_name:
