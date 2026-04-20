@@ -177,6 +177,11 @@ match_threshold = 0.7   # cosine similarity threshold for voiceprint matching
 
 [output]
 timestamp_format = "HH:MM:SS"
+
+[logging]
+file = "~/.config/whotalksitron/whotalksitron.log"
+file_max_bytes = 10_485_760   # 10MB, range: 1MB-1GB
+file_backup_count = 5         # range: 1-10
 ```
 
 ## Backends
