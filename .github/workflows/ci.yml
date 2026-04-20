@@ -43,6 +43,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv run ruff check --select S .
+      - run: uv run pip-audit
 
   test:
     runs-on: ubuntu-latest

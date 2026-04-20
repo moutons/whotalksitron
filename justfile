@@ -18,11 +18,11 @@ secaudit: _ci_secaudit
     gitleaks git --platform gitea --platform github .
 
 # Full CI simulation
-ensureci: _ci_mdlint _ci_lint _ci_fmtcheck _ci_vulncheck _ci_secaudit _ci_typecheck _ci_testcover _ci_workflows
+ensureci: _ci_mdlint _ci_lint _ci_fmtcheck _ci_vulncheck _ci_liccheck _ci_secaudit _ci_typecheck _ci_testcover _ci_workflows
     @echo "All CI checks passed!"
 
 # Sandbox-safe CI (no TLS-dependent checks)
-ensureci-sandbox: _ci_mdlint _ci_lint _ci_fmtcheck _ci_secaudit _ci_typecheck _ci_testcover _ci_workflows
+ensureci-sandbox: _ci_mdlint _ci_lint _ci_fmtcheck _ci_liccheck _ci_secaudit _ci_typecheck _ci_testcover _ci_workflows
     @echo "All sandbox-compatible CI checks passed! (vulncheck skipped)"
 
 # Quick validation
@@ -50,7 +50,10 @@ _ci_fmtcheck:
     uv run ruff format --check .
 
 _ci_vulncheck:
-    @echo "_ci_vulncheck: not yet configured (requires network)"
+    uv run pip-audit
+
+_ci_liccheck:
+    uv run pip-licenses --allow-only="Apache-2.0;Apache Software License;Apache-2.0 OR BSD-2-Clause;Apache-2.0 OR BSD-3-Clause;BSD License;BSD-2-Clause;BSD-3-Clause;BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0;ISC License (ISCL);ISC;MIT;MIT License;Mozilla Public License 2.0 (MPL 2.0);PSF-2.0;Python Software Foundation License;3-Clause BSD License;Apache Software License; MIT License;GNU Lesser General Public License v3 (LGPLv3)" --ignore-packages google-crc32c
 
 _ci_secaudit:
     uv run ruff check --select S .

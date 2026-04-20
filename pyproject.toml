@@ -27,11 +27,6 @@ local = [
     "pyannote.audio>=3.1,<4",
     "faster-whisper>=1.1,<2",
 ]
-dev = [
-    "pytest>=8.0,<9",
-    "pytest-cov>=5.0,<6",
-    "ruff>=0.8,<1",
-]
 
 [project.scripts]
 whotalksitron = "whotalksitron.cli:main"
@@ -57,7 +52,9 @@ packages = ["src/whotalksitron"]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0,<9",
+    "pip-audit>=2.10.0",
+    "pip-licenses>=5.5.5",
+    "pytest>=9.0.3,<10",
     "pytest-cov>=5.0,<6",
     "python-semantic-release>=10.5.3",
     "ruff>=0.8,<1",
