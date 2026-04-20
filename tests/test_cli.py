@@ -354,6 +354,60 @@ def test_file_handler_disabled_when_empty():
     assert handler is None
 
 
+def test_console_filter_passes_whotalksitron_loggers():
+    """Console handler must pass whotalksitron.* log records."""
+    from whotalksitron.cli import _setup_logging
+
+    _setup_logging("info", "text")
+
+    console = None
+    for h in logging.root.handlers:
+        if h.get_name() == "whotalksitron_console":
+            console = h
+            break
+    assert console is not None
+
+    record = logging.LogRecord(
+        "whotalksitron.backends.gemini", logging.INFO, "", 0, "test msg", (), None
+    )
+    assert console.filter(record)
+
+
+def test_console_filter_blocks_third_party_loggers():
+    """Console handler must block httpx, google_genai, and other third-party loggers."""
+    from whotalksitron.cli import _setup_logging
+
+    _setup_logging("info", "text")
+
+    console = None
+    for h in logging.root.handlers:
+        if h.get_name() == "whotalksitron_console":
+            console = h
+            break
+    assert console is not None
+
+    for name in ("httpx", "google_genai.models", "google.auth", "httpcore"):
+        record = logging.LogRecord(name, logging.INFO, "", 0, "noise", (), None)
+        assert not console.filter(record), f"Should block {name}"
+
+
+def test_console_filter_blocks_third_party_even_at_debug():
+    """Third-party loggers stay blocked even with --log-level debug."""
+    from whotalksitron.cli import _setup_logging
+
+    _setup_logging("debug", "text")
+
+    console = None
+    for h in logging.root.handlers:
+        if h.get_name() == "whotalksitron_console":
+            console = h
+            break
+    assert console is not None
+
+    record = logging.LogRecord("httpx", logging.DEBUG, "", 0, "noise", (), None)
+    assert not console.filter(record)
+
+
 def test_setup_logging_preserves_non_console_handlers():
     """_setup_logging must only replace the console handler, not clear all handlers."""
     import logging

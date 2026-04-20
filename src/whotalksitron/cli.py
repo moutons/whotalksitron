@@ -18,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 _CONSOLE_HANDLER_NAME = "whotalksitron_console"
 
+
+class _ConsoleFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.name.startswith("whotalksitron")
+
+
 _SECRET_FLAG_PATTERN = re.compile(
     r"-{1,2}[a-z_-]*(key|token|secret|password)[a-z_-]*", re.IGNORECASE
 )
@@ -59,6 +65,7 @@ def _setup_logging(level: str, fmt: str) -> None:
     handler = logging.StreamHandler(sys.stderr)
     handler.set_name(_CONSOLE_HANDLER_NAME)
     handler.setLevel(numeric)  # console handler filters by level
+    handler.addFilter(_ConsoleFilter())
     if fmt == "json":
         import json
 
