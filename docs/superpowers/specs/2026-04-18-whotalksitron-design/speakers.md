@@ -13,8 +13,8 @@
         └── <speaker>/
             ├── meta.toml
             ├── samples/
-            │   ├── sample-001.mp3
-            │   └── sample-002.wav
+            │   ├── sample-a1b2c3d4e5f6.mp3
+            │   └── sample-f6e5d4c3b2a1.wav
             └── embeddings/
                 └── embedding.npy
 ```
@@ -50,8 +50,10 @@ Voiceprint matching is a post-processing step, not part of the backend protocol.
 
 1. Load enrolled speakers for the specified podcast.
 2. For segments with generic labels ("Speaker N") or `None`, compare the speaker's audio against enrolled embeddings.
-3. Match if cosine similarity exceeds the configured threshold (default: 0.7).
+3. Match if cosine similarity exceeds the configured threshold (default: 0.7, exclusive — similarity must be strictly greater than threshold).
 4. Replace generic labels with enrolled speaker names. Leave unmatched segments as-is.
+
+**Speaker label format:** Generic speakers are zero-padded: `Speaker 01`, `Speaker 02`, etc. Padding width auto-increments when count exceeds capacity (e.g., >99 speakers → `Speaker 001`). Minimum padding is 2 digits.
 
 **Exception:** The Gemini backend handles matching internally by sending voice samples as prompt context. The post-processing step still runs as a fallback if Gemini returned generic labels despite receiving samples.
 

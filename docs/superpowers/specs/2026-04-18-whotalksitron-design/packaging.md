@@ -14,6 +14,7 @@ whotalksitron/
 │       ├── models.py           # TranscriptSegment, TranscriptResult, SpeakerPool
 │       ├── output.py           # markdown renderer
 │       ├── progress.py         # JSON progress reporting to stderr
+│       ├── retry.py            # exponential backoff for API calls
 │       ├── backends/
 │       │   ├── __init__.py     # Backend protocol, auto-selection
 │       │   ├── gemini.py
@@ -23,11 +24,13 @@ whotalksitron/
 │           ├── __init__.py
 │           ├── enrollment.py   # enroll, import, list, extract
 │           ├── matching.py     # voiceprint comparison
-│           └── embeddings.py   # embedding computation
+│           ├── embeddings.py   # embedding computation
+│           └── extraction.py   # sample extraction from transcripts
 └── tests/
     ├── conftest.py
     ├── test_cli.py
     ├── test_config.py
+    ├── test_retry.py
     ├── test_pipeline.py
     ├── test_output.py
     ├── test_backends/
@@ -37,7 +40,8 @@ whotalksitron/
     └── test_speakers/
         ├── test_enrollment.py
         ├── test_matching.py
-        └── test_embeddings.py
+        ├── test_embeddings.py
+        └── test_extraction.py
 ```
 
 ## Dependencies
@@ -58,6 +62,7 @@ local = [
     "torch",
     "torchaudio",
     "pyannote.audio",
+    "faster-whisper",
 ]
 ```
 

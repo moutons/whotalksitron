@@ -29,8 +29,8 @@ Detected before processing begins.
 
 | Condition | Behavior |
 |---|---|
-| API rate limit | Retry with exponential backoff. Log each retry at `info`. |
-| API timeout | Retry up to 3 times, then fail with suggestion to try a local backend. |
+| API rate limit | Retry with exponential backoff (base 2s, max 3 retries). Log each retry at `info`. Uses `retry_with_backoff()` from `whotalksitron.retry`. |
+| API timeout | Retry up to 3 times with backoff, then fail with actionable message suggesting a local backend. |
 | pyannote OOM | `Model requires more RAM than available. Try whisper_model = "medium" in config.` |
 | Partial failure | Emit transcript without speaker labels, warn clearly. Exit code 3. |
 

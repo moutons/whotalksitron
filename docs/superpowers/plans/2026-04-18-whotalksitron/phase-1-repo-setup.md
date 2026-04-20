@@ -43,6 +43,7 @@ local = [
     "torch>=2.2,<3",
     "torchaudio>=2.2,<3",
     "pyannote.audio>=3.1,<4",
+    "faster-whisper>=1.1,<2",
 ]
 dev = [
     "pytest>=8.0,<9",

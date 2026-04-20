@@ -195,13 +195,14 @@ class SpeakerStore:
         sample_path: Path,
         compute_embedding: bool = True,
     ) -> None:
+        import uuid
+
         speaker_dir = self._speaker_dir(podcast, name)
         samples_dir = speaker_dir / "samples"
         samples_dir.mkdir(parents=True, exist_ok=True)
 
-        existing = list(samples_dir.iterdir())
-        index = len(existing) + 1
-        dest = samples_dir / f"sample-{index:03d}{sample_path.suffix}"
+        uid = uuid.uuid4().hex[:12]
+        dest = samples_dir / f"sample-{uid}{sample_path.suffix}"
         shutil.copy2(sample_path, dest)
 
         self._write_meta(name, podcast)
@@ -384,7 +385,7 @@ from unittest.mock import patch, MagicMock
 
 from whotalksitron.speakers.embeddings import (
     EmbeddingComputer,
-    compute_embedding,
+    get_embedding_computer,
     load_embedding,
     save_embedding,
     average_embeddings,
@@ -432,7 +433,10 @@ def test_average_embeddings_empty():
 
 
 def test_embedding_computer_protocol():
-    computer = EmbeddingComputer()
+    # EmbeddingComputer is a Protocol — verify concrete implementations satisfy it
+    from whotalksitron.speakers.embeddings import _OnnxEmbedder
+    computer = _OnnxEmbedder()
+    assert isinstance(computer, EmbeddingComputer)
     assert hasattr(computer, "compute")
     assert hasattr(computer, "is_available")
 ```
@@ -582,26 +586,26 @@ def test_cosine_similarity_opposite():
 
 def test_match_speakers_relabels():
     segments = [
-        TranscriptSegment(start=0.0, end=5.0, text="Hello", speaker="Speaker 1"),
-        TranscriptSegment(start=5.0, end=10.0, text="World", speaker="Speaker 2"),
+        TranscriptSegment(start=0.0, end=5.0, text="Hello", speaker="Speaker 01"),
+        TranscriptSegment(start=5.0, end=10.0, text="World", speaker="Speaker 02"),
     ]
     result = TranscriptResult(segments=segments, metadata={})
 
-    # Speaker 1's embedding is similar to matt's
+    # Speaker 01's embedding is similar to matt's
     matt_emb = np.array([1.0, 0.0, 0.0], dtype=np.float32)
     speaker_embeddings = SpeakerEmbeddings(
         enrolled={"matt": matt_emb},
-        detected={"Speaker 1": np.array([0.95, 0.1, 0.0], dtype=np.float32)},
+        detected={"Speaker 01": np.array([0.95, 0.1, 0.0], dtype=np.float32)},
     )
 
     matched = match_speakers(result, speaker_embeddings, threshold=0.7)
     assert matched.segments[0].speaker == "matt"
-    assert matched.segments[1].speaker == "Speaker 2"  # no match, unchanged
+    assert matched.segments[1].speaker == "Speaker 02"  # no match, unchanged
 
 
 def test_match_speakers_no_detected():
     segments = [
-        TranscriptSegment(start=0.0, end=5.0, text="Hello", speaker="Speaker 1"),
+        TranscriptSegment(start=0.0, end=5.0, text="Hello", speaker="Speaker 01"),
     ]
     result = TranscriptResult(segments=segments, metadata={})
 
@@ -611,22 +615,22 @@ def test_match_speakers_no_detected():
     )
 
     matched = match_speakers(result, speaker_embeddings, threshold=0.7)
-    assert matched.segments[0].speaker == "Speaker 1"  # unchanged
+    assert matched.segments[0].speaker == "Speaker 01"  # unchanged
 
 
 def test_match_speakers_below_threshold():
     segments = [
-        TranscriptSegment(start=0.0, end=5.0, text="Hello", speaker="Speaker 1"),
+        TranscriptSegment(start=0.0, end=5.0, text="Hello", speaker="Speaker 01"),
     ]
     result = TranscriptResult(segments=segments, metadata={})
 
     speaker_embeddings = SpeakerEmbeddings(
         enrolled={"matt": np.array([1.0, 0.0], dtype=np.float32)},
-        detected={"Speaker 1": np.array([0.0, 1.0], dtype=np.float32)},
+        detected={"Speaker 01": np.array([0.0, 1.0], dtype=np.float32)},
     )
 
     matched = match_speakers(result, speaker_embeddings, threshold=0.7)
-    assert matched.segments[0].speaker == "Speaker 1"  # no match
+    assert matched.segments[0].speaker == "Speaker 01"  # no match
 
 
 def test_match_speakers_none_speaker_unchanged():
@@ -642,6 +646,34 @@ def test_match_speakers_none_speaker_unchanged():
 
     matched = match_speakers(result, speaker_embeddings, threshold=0.7)
     assert matched.segments[0].speaker is None
+
+
+def test_match_speakers_at_exact_threshold():
+    # Cosine similarity of exactly 0.7 should NOT match (threshold is exclusive)
+    a = np.array([1.0, 0.0], dtype=np.float32)
+    # Construct a vector with cosine similarity ~0.7 to a
+    # cos(theta) = 0.7 => theta = acos(0.7)
+    import math
+    theta = math.acos(0.7)
+    b = np.array([math.cos(theta), math.sin(theta)], dtype=np.float32)
+
+    segments = [
+        TranscriptSegment(start=0.0, end=5.0, text="Hello", speaker="Speaker 01"),
+    ]
+    result = TranscriptResult(segments=segments, metadata={})
+
+    speaker_embeddings = SpeakerEmbeddings(
+        enrolled={"matt": a},
+        detected={"Speaker 01": b},
+    )
+
+    # At threshold=0.7, similarity of exactly 0.7 should not match (> not >=)
+    matched = match_speakers(result, speaker_embeddings, threshold=0.7)
+    assert matched.segments[0].speaker == "Speaker 01"
+
+    # Just above threshold should match
+    matched = match_speakers(result, speaker_embeddings, threshold=0.69)
+    assert matched.segments[0].speaker == "matt"
 
 
 def test_match_speakers_named_speaker_unchanged():
@@ -680,7 +712,7 @@ from whotalksitron.models import TranscriptResult, TranscriptSegment
 
 logger = logging.getLogger(__name__)
 
-_GENERIC_PATTERN = re.compile(r"^Speaker \d+$")
+_GENERIC_PATTERN = re.compile(r"^Speaker \d{2,}$")
 
 
 @dataclass

@@ -40,11 +40,11 @@ Inline speaker labels with timestamps. Dense, readable as markdown:
 
 **[00:00:00] Matt:** Welcome back to the show. Today we're talking about the new release and what it means for the ecosystem.
 
-**[00:00:15] Speaker 2:** Yeah, I've been looking forward to this one. There's a lot to unpack.
+**[00:00:15] Speaker 02:** Yeah, I've been looking forward to this one. There's a lot to unpack.
 
 **[00:00:22] Matt:** So let's dive right in. The first thing I wanted to cover is the breaking change in the API.
 ```
 
 The HTML comment metadata line is pipe-delimited for machine parsing. Fields: tool name, ISO 8601 timestamp, backend model, duration, podcast scope.
 
-Mixed speaker labels are expected. Some segments labeled with enrolled names ("Matt:"), others with generic identifiers ("Speaker 2:") in the same transcript.
+Mixed speaker labels are expected. Some segments labeled with enrolled names ("Matt:"), others with zero-padded generic identifiers ("Speaker 02:") in the same transcript. Padding auto-increments when speaker count exceeds capacity (minimum 2 digits).

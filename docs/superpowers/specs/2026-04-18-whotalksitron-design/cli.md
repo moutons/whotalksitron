@@ -76,7 +76,7 @@ After transcription, if unmatched speakers exist:
 ```
 Transcript complete. 2 unmatched speakers detected.
 
---- Speaker 3: 47 segments, 12:34 total speaking time ---
+--- Speaker 03: 47 segments, 12:34 total speaking time ---
 Playing sample (15s from 00:14:22)...
   [audio plays via system player]
 Identify this speaker (name, or Enter to skip, 'r' to replay, 'n' for next sample): marco
@@ -84,12 +84,12 @@ Identify this speaker (name, or Enter to skip, 'r' to replay, 'n' for next sampl
 Enrolled "marco" for podcast "atp" (3 samples extracted, embedding computed).
 Updating transcript with new labels... done.
 
---- Speaker 4: 12 segments, 3:45 total speaking time ---
+--- Speaker 04: 12 segments, 3:45 total speaking time ---
 Playing sample (11s from 00:45:03)...
   [audio plays via system player]
 Identify this speaker (name, or Enter to skip, 'r' to replay, 'n' for next sample):
 
-Skipped. Speaker 4 remains unlabeled.
+Skipped. Speaker 04 remains unlabeled.
 
 Wrote ep42.md (2 speakers identified, 1 unmatched)
 ```
@@ -100,15 +100,15 @@ When stdin is not a TTY, skip interactive prompts. Extract samples to a staging 
 
 ```
 Not a TTY. Extracted samples for 2 unmatched speakers to:
-  ~/.config/whotalksitron/staging/ep42/speaker-3/
-  ~/.config/whotalksitron/staging/ep42/speaker-4/
+  ~/.config/whotalksitron/staging/ep42/speaker-03/
+  ~/.config/whotalksitron/staging/ep42/speaker-04/
 Run `whotalksitron enroll` with these samples to identify them.
 ```
 
 **Behind the scenes:**
 
 1. Normal 6-stage pipeline runs.
-2. Check TranscriptResult for generic-labeled segments ("Speaker N").
+2. Check TranscriptResult for generic-labeled segments ("Speaker 01", "Speaker 02", etc.).
 3. For each unmatched speaker, collect all segments by timestamp.
 4. Score segments by quality: duration >10s preferred, no overlap with other speakers, spread across the episode.
 5. Select top 3 candidate segments. Extract audio clips via ffmpeg.
@@ -123,13 +123,13 @@ Run `whotalksitron enroll` with these samples to identify them.
 $ whotalksitron extract-samples ep42.mp3 --podcast atp
 
 Extracted samples to ./samples/:
-  speaker-1/  3 clips  (matched: matt)
-  speaker-2/  3 clips  (matched: casey)
-  speaker-3/  3 clips  (unmatched, 12:34 speaking time)
-  speaker-4/  3 clips  (unmatched, 3:45 speaking time)
+  speaker-01/  3 clips  (matched: matt)
+  speaker-02/  3 clips  (matched: casey)
+  speaker-03/  3 clips  (unmatched, 12:34 speaking time)
+  speaker-04/  3 clips  (unmatched, 3:45 speaking time)
 
 To enroll unmatched speakers:
-  whotalksitron enroll --name NAME --podcast atp --sample ./samples/speaker-3/sample-001.wav
+  whotalksitron enroll --name NAME --podcast atp --sample ./samples/speaker-03/sample-001.wav
 ```
 
 **Behind the scenes:**

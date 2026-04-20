@@ -4,7 +4,7 @@ Core types, configuration, progress reporting, and markdown output. After this p
 
 ---
 
-### Task 2: Core models `[sonnet]`
+### Task 2: Core models `[haiku]`
 
 **Files:**
 - Create: `src/whotalksitron/models.py`
@@ -68,11 +68,11 @@ def test_result_speakers():
         TranscriptSegment(start=0.0, end=5.0, text="a", speaker="Matt"),
         TranscriptSegment(start=5.0, end=10.0, text="b", speaker=None),
         TranscriptSegment(start=10.0, end=15.0, text="c", speaker="Matt"),
-        TranscriptSegment(start=15.0, end=20.0, text="d", speaker="Speaker 2"),
+        TranscriptSegment(start=15.0, end=20.0, text="d", speaker="Speaker 02"),
     ]
     result = TranscriptResult(segments=segments, metadata={})
-    assert result.speakers == {"Matt", "Speaker 2"}
-    assert result.unmatched_speakers == {"Speaker 2"}
+    assert result.speakers == {"Matt", "Speaker 02"}
+    assert result.unmatched_speakers == {"Speaker 02"}
 
 
 def test_speaker_pool_empty():
@@ -146,7 +146,7 @@ class TranscriptResult:
 
     @property
     def unmatched_speakers(self) -> set[str]:
-        pattern = re.compile(r"^Speaker \d+$")
+        pattern = re.compile(r"^Speaker \d{2,}$")
         return {s for s in self.speakers if pattern.match(s)}
 
 
@@ -295,6 +295,75 @@ def test_config_dir():
 def test_config_speakers_dir():
     cfg = Config()
     assert cfg.speakers_dir == cfg.config_dir / "speakers"
+
+
+def test_config_keychain_retrieval(monkeypatch):
+    from unittest.mock import patch, MagicMock
+    import subprocess
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = "keychain-api-key-123\n"
+
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        cfg = load_config(config_path=None, cli_overrides={})
+
+    # Verify security command was called with correct args
+    calls = [c for c in mock_run.call_args_list
+             if c[0][0][0] == "security"]
+    assert len(calls) >= 1
+    assert "find-generic-password" in calls[0][0][0]
+    assert cfg.gemini_api_key == "keychain-api-key-123"
+
+
+def test_config_env_beats_keychain(monkeypatch):
+    from unittest.mock import patch, MagicMock
+    import subprocess
+
+    monkeypatch.setenv("GEMINI_API_KEY", "env-key")
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = "keychain-key\n"
+
+    with patch("subprocess.run", return_value=mock_result):
+        cfg = load_config(config_path=None, cli_overrides={})
+
+    # Env var should override keychain
+    assert cfg.gemini_api_key == "env-key"
+
+
+def test_config_1password_retrieval(monkeypatch, tmp_path):
+    from unittest.mock import patch, MagicMock
+    import subprocess
+
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+    data = {
+        "gemini": {
+            "op_reference": "op://vault/item/field",
+        },
+    }
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    # Keychain fails, 1Password succeeds
+    def mock_run(cmd, **kwargs):
+        result = MagicMock()
+        if cmd[0] == "security":
+            result.returncode = 44  # not found
+            result.stdout = ""
+        elif cmd[0] == "op":
+            result.returncode = 0
+            result.stdout = "op-api-key-456\n"
+        else:
+            result.returncode = 1
+            result.stdout = ""
+        return result
+
+    with patch("subprocess.run", side_effect=mock_run):
+        cfg = load_config(config_path=config_file, cli_overrides={})
+
+    assert cfg.gemini_api_key == "op-api-key-456"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -327,6 +396,9 @@ class Config:
     gemini_api_key: str = ""
     gemini_use_adc: bool = False
     gemini_model: str = "gemini-2.5-flash"
+    gemini_keychain_account: str = "vertex"
+    gemini_keychain_service: str = "vertex-apikey"
+    gemini_op_reference: str = ""
 
     pyannote_whisper_model: str = "large-v3"
     pyannote_diarization_model: str = "pyannote/speaker-diarization-3.1"
@@ -375,6 +447,12 @@ class Config:
             cfg.gemini_use_adc = gemini["use_adc"]
         if "model" in gemini:
             cfg.gemini_model = gemini["model"]
+        if "keychain_account" in gemini:
+            cfg.gemini_keychain_account = gemini["keychain_account"]
+        if "keychain_service" in gemini:
+            cfg.gemini_keychain_service = gemini["keychain_service"]
+        if "op_reference" in gemini:
+            cfg.gemini_op_reference = gemini["op_reference"]
 
         if "whisper_model" in pyannote:
             cfg.pyannote_whisper_model = pyannote["whisper_model"]
@@ -435,6 +513,9 @@ class Config:
                 "api_key": "",
                 "use_adc": False,
                 "model": self.gemini_model,
+                "keychain_account": self.gemini_keychain_account,
+                "keychain_service": self.gemini_keychain_service,
+                "op_reference": "",
             },
             "pyannote": {
                 "whisper_model": self.pyannote_whisper_model,
@@ -466,6 +547,10 @@ def load_config(
 
     cfg = Config.from_file(config_path)
 
+    # Keychain / 1Password: resolve API key if not set in config
+    if not cfg.gemini_api_key:
+        cfg.gemini_api_key = _resolve_secret(cfg) or ""
+
     env_map = {
         "GEMINI_API_KEY": "gemini_api_key",
         "WHOTALKSITRON_BACKEND": "backend",
@@ -481,6 +566,60 @@ def load_config(
             setattr(cfg, key, val)
 
     return cfg
+
+
+def _resolve_secret(cfg: Config) -> str | None:
+    """Try to retrieve API key from macOS Keychain or 1Password CLI.
+
+    Precedence:
+    1. macOS Keychain (security find-generic-password)
+    2. 1Password CLI (op read)
+    """
+    import logging
+    import subprocess
+
+    logger = logging.getLogger(__name__)
+
+    # macOS Keychain
+    keychain_account = cfg.gemini_keychain_account
+    keychain_service = cfg.gemini_keychain_service
+    try:
+        result = subprocess.run(
+            [
+                "security", "find-generic-password",
+                "-a", keychain_account,
+                "-s", keychain_service,
+                "-w",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            logger.debug("API key loaded from macOS Keychain (%s/%s)", keychain_service, keychain_account)
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # 1Password CLI
+    op_ref = cfg.gemini_op_reference or None
+    if op_ref:
+        try:
+            result = subprocess.run(
+                ["op", "read", op_ref],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                logger.debug("API key loaded from 1Password")
+                return result.stdout.strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    return None
 
 
 def _mask_secret(value: str) -> str:
@@ -508,7 +647,7 @@ masking, and default config generation."
 
 ---
 
-### Task 4: Progress reporting `[sonnet]`
+### Task 4: Progress reporting `[haiku]`
 
 **Files:**
 - Create: `src/whotalksitron/progress.py`
@@ -618,7 +757,7 @@ Expected: all 4 tests PASS
 
 ---
 
-### Task 5: Markdown output formatter `[sonnet]`
+### Task 5: Markdown output formatter `[haiku]`
 
 **Files:**
 - Create: `src/whotalksitron/output.py`
@@ -637,7 +776,7 @@ def test_render_basic_transcript():
     result = TranscriptResult(
         segments=[
             TranscriptSegment(start=0.0, end=5.0, text="Hello world.", speaker="Matt"),
-            TranscriptSegment(start=5.0, end=10.0, text="Hi there.", speaker="Speaker 2"),
+            TranscriptSegment(start=5.0, end=10.0, text="Hi there.", speaker="Speaker 02"),
         ],
         metadata={"model": "gemini-2.5-flash", "backend": "gemini"},
     )
@@ -649,7 +788,7 @@ def test_render_basic_transcript():
 
     assert "# Transcript: episode.mp3" in output
     assert "**[00:00:00] Matt:** Hello world." in output
-    assert "**[00:00:05] Speaker 2:** Hi there." in output
+    assert "**[00:00:05] Speaker 02:** Hi there." in output
 
 
 def test_render_includes_metadata_comment():
@@ -702,14 +841,14 @@ def test_render_mixed_speakers():
     result = TranscriptResult(
         segments=[
             TranscriptSegment(start=0.0, end=5.0, text="Known.", speaker="Matt"),
-            TranscriptSegment(start=5.0, end=10.0, text="Unknown.", speaker="Speaker 1"),
+            TranscriptSegment(start=5.0, end=10.0, text="Unknown.", speaker="Speaker 01"),
             TranscriptSegment(start=10.0, end=15.0, text="No label."),
         ],
         metadata={"model": "test", "backend": "test"},
     )
     output = render_transcript(result, source_file="test.mp3")
     assert "**[00:00:00] Matt:**" in output
-    assert "**[00:00:05] Speaker 1:**" in output
+    assert "**[00:00:05] Speaker 01:**" in output
     assert "**[00:00:10]**" in output
 ```
 
@@ -786,4 +925,165 @@ JSON progress lines on stderr for machine-parseable stage updates.
 Markdown renderer produces inline speaker labels with timestamps."
 ```
 
-`[REVIEW:light]` — Phase 2 complete. Verify core foundation: models, config, progress, output.
+---
+
+### Task 5b: Retry helper `[haiku]`
+
+**Files:**
+- Create: `src/whotalksitron/retry.py`
+- Create: `tests/test_retry.py`
+
+**Reference:** Read `docs/superpowers/specs/2026-04-18-whotalksitron-design/errors.md` for retry requirements (exponential backoff, max 3 retries, log each attempt).
+
+- [ ] **Step 1: Write failing tests**
+
+Create `tests/test_retry.py`:
+
+```python
+import pytest
+
+from whotalksitron.retry import retry_with_backoff, RetryExhausted
+
+
+class FlakyError(Exception):
+    pass
+
+
+def test_retry_succeeds_on_first_try():
+    call_count = 0
+
+    def succeeds():
+        nonlocal call_count
+        call_count += 1
+        return "ok"
+
+    result = retry_with_backoff(succeeds, retries=3, retry_on=(FlakyError,))
+    assert result == "ok"
+    assert call_count == 1
+
+
+def test_retry_succeeds_after_failures():
+    call_count = 0
+
+    def fails_twice():
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise FlakyError("transient")
+        return "recovered"
+
+    result = retry_with_backoff(
+        fails_twice, retries=3, retry_on=(FlakyError,), base_delay=0.01,
+    )
+    assert result == "recovered"
+    assert call_count == 3
+
+
+def test_retry_exhausted():
+    def always_fails():
+        raise FlakyError("permanent")
+
+    with pytest.raises(RetryExhausted) as exc_info:
+        retry_with_backoff(
+            always_fails, retries=2, retry_on=(FlakyError,), base_delay=0.01,
+        )
+    assert isinstance(exc_info.value.__cause__, FlakyError)
+
+
+def test_retry_does_not_catch_unexpected_errors():
+    def wrong_error():
+        raise ValueError("unexpected")
+
+    with pytest.raises(ValueError, match="unexpected"):
+        retry_with_backoff(
+            wrong_error, retries=3, retry_on=(FlakyError,), base_delay=0.01,
+        )
+
+
+def test_retry_logs_attempts(caplog):
+    import logging
+    call_count = 0
+
+    def fails_once():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise FlakyError("once")
+        return "ok"
+
+    with caplog.at_level(logging.INFO, logger="whotalksitron.retry"):
+        retry_with_backoff(
+            fails_once, retries=3, retry_on=(FlakyError,), base_delay=0.01,
+        )
+
+    assert any("Retry 1/3" in r.message for r in caplog.records)
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `uv run pytest tests/test_retry.py -v`
+Expected: FAIL with `ImportError`
+
+- [ ] **Step 3: Implement retry helper**
+
+Create `src/whotalksitron/retry.py`:
+
+```python
+from __future__ import annotations
+
+import logging
+import time
+from typing import Callable, TypeVar
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+class RetryExhausted(Exception):
+    pass
+
+
+def retry_with_backoff(
+    fn: Callable[[], T],
+    *,
+    retries: int = 3,
+    base_delay: float = 1.0,
+    retry_on: tuple[type[Exception], ...] = (Exception,),
+) -> T:
+    last_error: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return fn()
+        except retry_on as e:
+            last_error = e
+            if attempt == retries:
+                break
+            delay = base_delay * (2 ** attempt)
+            logger.info(
+                "Retry %d/%d after %s: %.1fs backoff",
+                attempt + 1, retries, type(e).__name__, delay,
+            )
+            time.sleep(delay)
+
+    raise RetryExhausted(
+        f"Failed after {retries} retries: {last_error}"
+    ) from last_error
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `uv run pytest tests/test_retry.py -v`
+Expected: all 5 tests PASS
+
+- [ ] **Step 5: Commit** `[COMMIT]`
+
+```bash
+git add src/whotalksitron/retry.py tests/test_retry.py
+git commit -m "Add retry helper with exponential backoff
+
+Generic retry_with_backoff() for transient API failures. Logs each
+retry attempt. Raises RetryExhausted after max retries."
+```
+
+`[REVIEW:light]` — Phase 2 complete. Verify core foundation: models, config, progress, output, retry.

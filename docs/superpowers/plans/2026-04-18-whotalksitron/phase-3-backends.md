@@ -4,7 +4,7 @@ Backend protocol, Gemini implementation, and Whisper-only implementation. After 
 
 ---
 
-### Task 6: Backend protocol and auto-selection `[sonnet]`
+### Task 6: Backend protocol and auto-selection `[haiku]`
 
 **Files:**
 - Create: `src/whotalksitron/backends/__init__.py`
@@ -289,6 +289,7 @@ class PyAnnoteBackend:
         try:
             import pyannote.audio  # noqa: F401
             import torch  # noqa: F401
+            import faster_whisper  # noqa: F401
             return True
         except ImportError:
             return False
@@ -401,10 +402,27 @@ def test_parse_response_no_speaker():
     assert segments[0].text == "Hello world."
 
 
+def test_parse_response_colon_in_text_not_speaker():
+    response_text = "[00:00:00] Matt: Note: this is important.\n"
+    segments = _parse_response(response_text)
+    assert len(segments) == 1
+    assert segments[0].speaker == "Matt"
+    assert segments[0].text == "Note: this is important."
+
+
+def test_parse_response_no_speaker_with_colon():
+    response_text = "[00:00:00] Note: this is important.\n"
+    segments = _parse_response(response_text)
+    assert len(segments) == 1
+    assert segments[0].speaker is None
+    assert segments[0].text == "Note: this is important."
+
+
 def test_parse_response_hour_timestamps():
-    response_text = "[01:23:45] Speaker 1: Long episode.\n"
+    response_text = "[01:23:45] Speaker 01: Long episode.\n"
     segments = _parse_response(response_text)
     assert segments[0].start == 5025.0
+    assert segments[0].speaker == "Speaker 01"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -460,11 +478,24 @@ class GeminiBackend:
         if progress:
             progress.update("transcribe", 30, "sending to Gemini API")
 
+        from whotalksitron.retry import retry_with_backoff, RetryExhausted
+
         logger.debug("Gemini model: %s", self._config.gemini_model)
-        response = client.models.generate_content(
-            model=self._config.gemini_model,
-            contents=[*contents, prompt],
-        )
+        try:
+            response = retry_with_backoff(
+                lambda: client.models.generate_content(
+                    model=self._config.gemini_model,
+                    contents=[*contents, prompt],
+                ),
+                retries=3,
+                base_delay=2.0,
+                retry_on=(Exception,),  # Gemini SDK raises various exceptions
+            )
+        except RetryExhausted:
+            raise RuntimeError(
+                "Gemini API failed after 3 retries. Check your API key and "
+                "network connection, or try a local backend."
+            )
 
         if progress:
             progress.update("transcribe", 90, "parsing response")
@@ -539,7 +570,8 @@ def _build_prompt(speakers: SpeakerPool | None) -> str:
         "Transcribe this audio with speaker diarization. "
         "Format each line as: [HH:MM:SS] Speaker Name: text\n"
         "Use consistent speaker names throughout. "
-        "If you cannot identify a speaker, use 'Speaker 1', 'Speaker 2', etc."
+        "If you cannot identify a speaker, use zero-padded labels: "
+        "'Speaker 01', 'Speaker 02', etc."
     )
     if speakers and speakers.speakers:
         names = ", ".join(sorted(speakers.speakers.keys()))
@@ -548,15 +580,17 @@ def _build_prompt(speakers: SpeakerPool | None) -> str:
             "The audio samples before the main recording are voice references. "
             "Match speakers in the recording against these references and use "
             "their names. For any speakers that don't match a reference, use "
-            "'Speaker 1', 'Speaker 2', etc."
+            "'Speaker 01', 'Speaker 02', etc."
         )
     return base
 
 
 def _parse_response(text: str) -> list[TranscriptSegment]:
+    # Speaker names: 1-3 capitalized words before a colon, no digits-only or
+    # punctuation-heavy tokens. This avoids matching "Note:" or "Step 1:" as speakers.
     pattern = re.compile(
         r"\[(\d{1,2}:\d{2}:\d{2})\]\s*"
-        r"(?:([^:]+?):\s*)?"
+        r"(?:((?:(?:Speaker\s+\d+)|(?:[A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2}))):\s+)?"
         r"(.+)"
     )
     segments: list[TranscriptSegment] = []
@@ -751,22 +785,38 @@ class WhisperBackend:
         logger.debug("Whisper endpoint: %s", url)
         logger.debug("Whisper model: %s", self._config.whisper_model)
 
-        with open(audio_path, "rb") as f:
-            response = httpx.post(
-                url,
-                files={"file": (audio_path.name, f, "audio/mpeg")},
-                data={
-                    "model": self._config.whisper_model,
-                    "response_format": "verbose_json",
-                    "timestamp_granularities[]": "segment",
-                },
-                timeout=600.0,
+        from whotalksitron.retry import retry_with_backoff, RetryExhausted
+
+        def _post_transcription():
+            with open(audio_path, "rb") as f:
+                resp = httpx.post(
+                    url,
+                    files={"file": (audio_path.name, f, "audio/mpeg")},
+                    data={
+                        "model": self._config.whisper_model,
+                        "response_format": "verbose_json",
+                        "timestamp_granularities[]": "segment",
+                    },
+                    timeout=600.0,
+                )
+            resp.raise_for_status()
+            return resp
+
+        try:
+            response = retry_with_backoff(
+                _post_transcription,
+                retries=3,
+                base_delay=2.0,
+                retry_on=(httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException),
+            )
+        except RetryExhausted:
+            raise RuntimeError(
+                f"Whisper endpoint at {self._config.whisper_endpoint} failed "
+                "after 3 retries. Is Ollama/LM Studio running?"
             )
 
         if progress:
             progress.update("transcribe", 80, "parsing response")
-
-        response.raise_for_status()
         data = response.json()
 
         segments = _parse_whisper_response(data)

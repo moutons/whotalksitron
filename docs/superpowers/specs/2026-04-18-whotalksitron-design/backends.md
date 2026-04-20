@@ -50,10 +50,10 @@ If `--backend` is specified and that backend is unavailable, error immediately w
 - Handles chunking for files exceeding the Gemini API inline data limit (20MB). Files above this threshold are uploaded via the File API before transcription.
 - Authentication: API key (`GEMINI_API_KEY` env var or config) or Google Cloud ADC.
 
-### pyannote+Whisper
+### pyannote+faster-whisper
 
-- Two-stage local pipeline.
-- Stage 1: Whisper transcribes audio to timestamped text segments.
+- Two-stage local pipeline using `faster-whisper` (CTranslate2-based, 4x faster, lower memory than openai-whisper).
+- Stage 1: faster-whisper transcribes audio to timestamped text segments.
 - Stage 2: pyannote diarizes audio into speaker-labeled time regions.
 - Merge: align Whisper segments with pyannote speaker regions by timestamp overlap.
 - Voiceprint matching: compare each diarized speaker's embedding against enrolled embeddings using cosine similarity. Match if similarity exceeds threshold (default: 0.7, configurable).

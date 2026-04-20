@@ -42,9 +42,9 @@ def test_merge_basic():
 
     merged = _merge_transcription_and_diarization(transcription, diarization)
     assert len(merged) == 3
-    assert merged[0].speaker == "Speaker 1"  # SPEAKER_00 -> Speaker 1
-    assert merged[1].speaker == "Speaker 1"  # majority overlap with SPEAKER_00
-    assert merged[2].speaker == "Speaker 2"  # SPEAKER_01 -> Speaker 2
+    assert merged[0].speaker == "Speaker 01"  # SPEAKER_00 -> Speaker 01
+    assert merged[1].speaker == "Speaker 02"  # majority overlap with SPEAKER_01 (3s vs 2s)
+    assert merged[2].speaker == "Speaker 02"  # SPEAKER_01 -> Speaker 02
 
 
 def test_merge_empty_transcription():
@@ -70,7 +70,19 @@ def test_merge_overlapping_speakers():
         (3.0, 10.0, "SPEAKER_01"),
     ]
     merged = _merge_transcription_and_diarization(transcription, diarization)
-    assert merged[0].speaker == "Speaker 2"  # SPEAKER_01 has more overlap (7s vs 3s)
+    assert merged[0].speaker == "Speaker 02"  # SPEAKER_01 has more overlap (7s vs 3s)
+
+
+def test_speaker_pad_width():
+    from whotalksitron.backends.pyannote import _speaker_pad_width
+    assert _speaker_pad_width(0) == 2     # minimum 2 digits
+    assert _speaker_pad_width(1) == 2     # 01
+    assert _speaker_pad_width(9) == 2     # 09
+    assert _speaker_pad_width(10) == 2    # 10
+    assert _speaker_pad_width(99) == 2    # 99
+    assert _speaker_pad_width(100) == 3   # 001..100
+    assert _speaker_pad_width(999) == 3   # 001..999
+    assert _speaker_pad_width(1000) == 4  # 0001..1000
 
 
 def test_select_device_auto():
@@ -119,32 +131,35 @@ class PyAnnoteBackend:
         progress: ProgressCallback | None = None,
     ) -> TranscriptResult:
         import torch
-        import whisper
+        from faster_whisper import WhisperModel
         from pyannote.audio import Pipeline as DiarizationPipeline
 
         audio_path = Path(audio_path)
         device = _select_device(self._config.pyannote_device)
-        logger.info("Using device: %s", device)
+        compute_type = "float16" if device != "cpu" else "int8"
+        logger.info("Using device: %s, compute_type: %s", device, compute_type)
 
         # Stage 1: Whisper transcription
         if progress:
             progress.update("transcribe", 0, "loading Whisper model")
 
-        whisper_model = whisper.load_model(
-            self._config.pyannote_whisper_model, device=device,
+        whisper_model = WhisperModel(
+            self._config.pyannote_whisper_model,
+            device=device,
+            compute_type=compute_type,
         )
 
         if progress:
             progress.update("transcribe", 20, "transcribing audio")
 
-        whisper_result = whisper_model.transcribe(str(audio_path))
+        segments_iter, _info = whisper_model.transcribe(str(audio_path))
         transcription = [
             TranscriptSegment(
-                start=seg["start"],
-                end=seg["end"],
-                text=seg["text"].strip(),
+                start=seg.start,
+                end=seg.end,
+                text=seg.text.strip(),
             )
-            for seg in whisper_result.get("segments", [])
+            for seg in segments_iter
         ]
 
         if progress:
@@ -190,8 +205,10 @@ class PyAnnoteBackend:
             emb_inference = Inference(emb_model, window="whole")
 
             raw_speakers = sorted(set(s for _, _, s in diarization_regions))
+            pad_width = _speaker_pad_width(len(raw_speakers))
             speaker_map = {
-                raw: f"Speaker {i + 1}" for i, raw in enumerate(raw_speakers)
+                raw: f"Speaker {str(i + 1).zfill(pad_width)}"
+                for i, raw in enumerate(raw_speakers)
             }
             # Compute embedding per detected speaker from their longest region
             for raw_name, mapped_name in speaker_map.items():
@@ -229,6 +246,7 @@ class PyAnnoteBackend:
         try:
             import pyannote.audio  # noqa: F401
             import torch  # noqa: F401
+            import faster_whisper  # noqa: F401
             return True
         except ImportError:
             return False
@@ -241,10 +259,12 @@ def _merge_transcription_and_diarization(
     if not transcription:
         return []
 
-    # Build speaker label map: SPEAKER_00 -> Speaker 1
+    # Build speaker label map: SPEAKER_00 -> Speaker 01
     raw_speakers = sorted(set(s for _, _, s in diarization))
+    pad_width = _speaker_pad_width(len(raw_speakers))
     speaker_map = {
-        raw: f"Speaker {i + 1}" for i, raw in enumerate(raw_speakers)
+        raw: f"Speaker {str(i + 1).zfill(pad_width)}"
+        for i, raw in enumerate(raw_speakers)
     }
 
     merged: list[TranscriptSegment] = []
@@ -283,6 +303,13 @@ def _find_majority_speaker(
     if not overlaps:
         return None
     return max(overlaps, key=overlaps.get)
+
+
+def _speaker_pad_width(count: int) -> int:
+    if count <= 0:
+        return 2
+    import math
+    return max(2, math.ceil(math.log10(count + 1)))
 
 
 def _select_device(device_config: str) -> str:
@@ -346,23 +373,23 @@ from whotalksitron.speakers.extraction import (
 
 def _make_segments() -> list[TranscriptSegment]:
     return [
-        TranscriptSegment(start=0.0, end=15.0, text="Hello.", speaker="Speaker 1"),
-        TranscriptSegment(start=15.0, end=20.0, text="Hi.", speaker="Speaker 2"),
-        TranscriptSegment(start=20.0, end=40.0, text="Long monologue.", speaker="Speaker 1"),
-        TranscriptSegment(start=40.0, end=55.0, text="Response.", speaker="Speaker 2"),
-        TranscriptSegment(start=55.0, end=60.0, text="Short.", speaker="Speaker 1"),
-        TranscriptSegment(start=60.0, end=80.0, text="Another long one.", speaker="Speaker 2"),
-        TranscriptSegment(start=80.0, end=95.0, text="More talk.", speaker="Speaker 1"),
+        TranscriptSegment(start=0.0, end=15.0, text="Hello.", speaker="Speaker 01"),
+        TranscriptSegment(start=15.0, end=20.0, text="Hi.", speaker="Speaker 02"),
+        TranscriptSegment(start=20.0, end=40.0, text="Long monologue.", speaker="Speaker 01"),
+        TranscriptSegment(start=40.0, end=55.0, text="Response.", speaker="Speaker 02"),
+        TranscriptSegment(start=55.0, end=60.0, text="Short.", speaker="Speaker 01"),
+        TranscriptSegment(start=60.0, end=80.0, text="Another long one.", speaker="Speaker 02"),
+        TranscriptSegment(start=80.0, end=95.0, text="More talk.", speaker="Speaker 01"),
     ]
 
 
 def test_group_segments_by_speaker():
     segments = _make_segments()
     groups = group_segments_by_speaker(segments)
-    assert "Speaker 1" in groups
-    assert "Speaker 2" in groups
-    assert len(groups["Speaker 1"]) == 4
-    assert len(groups["Speaker 2"]) == 3
+    assert "Speaker 01" in groups
+    assert "Speaker 02" in groups
+    assert len(groups["Speaker 01"]) == 4
+    assert len(groups["Speaker 02"]) == 3
 
 
 def test_group_segments_skips_none():
@@ -394,7 +421,7 @@ def test_score_segment_avoids_extremes():
 def test_find_candidates_top_3():
     segments = _make_segments()
     groups = group_segments_by_speaker(segments)
-    candidates = find_candidates(groups["Speaker 1"], total_duration=95.0, max_candidates=3)
+    candidates = find_candidates(groups["Speaker 01"], total_duration=95.0, max_candidates=3)
     assert len(candidates) <= 3
     # Candidates should be sorted by score descending
     scores = [c.score for c in candidates]
@@ -637,12 +664,14 @@ def extract_samples_cmd(ctx, audio_file, podcast, output):
         audio_file, result.transcript.segments, output_dir,
     )
 
+    import re
+
     click.echo(f"\nExtracted samples to {output_dir}/:")
     for speaker, paths in sorted(extracted.items()):
-        matched = "matched" if not speaker.startswith("Speaker") else "unmatched"
+        matched = "matched" if not re.match(r"^Speaker \d{2,}$", speaker) else "unmatched"
         click.echo(f"  {speaker}/  {len(paths)} clips  ({matched})")
 
-    unmatched = [s for s in extracted if s.startswith("Speaker")]
+    unmatched = [s for s in extracted if re.match(r"^Speaker \d{2,}$", s)]
     if unmatched and podcast:
         click.echo("\nTo enroll unmatched speakers:")
         for speaker in unmatched:

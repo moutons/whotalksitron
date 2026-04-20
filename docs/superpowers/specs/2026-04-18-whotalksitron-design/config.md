@@ -11,11 +11,16 @@ log_level = "info"
 progress = false
 
 [gemini]
-# API key (also checks GEMINI_API_KEY env var)
+# API key resolution order: CLI flag > GEMINI_API_KEY env var > macOS Keychain > 1Password > config file
 api_key = ""
 # Use Application Default Credentials instead of API key
 use_adc = false
 model = "gemini-2.5-flash"
+# macOS Keychain: `security add-generic-password -a <account> -s <service> -w`
+keychain_account = "vertex"
+keychain_service = "vertex-apikey"
+# 1Password CLI: `op read <reference>`
+op_reference = ""
 
 [pyannote]
 whisper_model = "large-v3"  # or "medium" for faster/less RAM
@@ -40,8 +45,9 @@ Highest to lowest:
 
 1. **CLI flags** (`--backend`, `--model`, `--log-level`, etc.)
 2. **Environment variables** (`GEMINI_API_KEY`, `WHOTALKSITRON_BACKEND`, etc.)
-3. **Config file** (`~/.config/whotalksitron/config.toml`)
-4. **Built-in defaults**
+3. **Secret stores** (macOS Keychain, 1Password CLI — for API keys only)
+4. **Config file** (`~/.config/whotalksitron/config.toml`)
+5. **Built-in defaults**
 
 ## Environment Variables
 

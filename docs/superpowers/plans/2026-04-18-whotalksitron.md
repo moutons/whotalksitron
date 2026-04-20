@@ -25,6 +25,7 @@ src/whotalksitron/models.py
 src/whotalksitron/pipeline.py
 src/whotalksitron/output.py
 src/whotalksitron/progress.py
+src/whotalksitron/retry.py
 src/whotalksitron/backends/__init__.py
 src/whotalksitron/backends/gemini.py
 src/whotalksitron/backends/pyannote.py
@@ -33,11 +34,13 @@ src/whotalksitron/speakers/__init__.py
 src/whotalksitron/speakers/enrollment.py
 src/whotalksitron/speakers/matching.py
 src/whotalksitron/speakers/embeddings.py
+src/whotalksitron/speakers/extraction.py
 tests/conftest.py
 tests/test_models.py
 tests/test_config.py
 tests/test_output.py
 tests/test_progress.py
+tests/test_retry.py
 tests/test_pipeline.py
 tests/test_cli.py
 tests/test_backends/__init__.py
@@ -48,6 +51,7 @@ tests/test_speakers/__init__.py
 tests/test_speakers/test_enrollment.py
 tests/test_speakers/test_matching.py
 tests/test_speakers/test_embeddings.py
+tests/test_speakers/test_extraction.py
 ```
 
 ### Files to Modify
@@ -65,7 +69,7 @@ lefthook.yml                — add fmtcheck for Python
 | Phase | File | Tasks | Focus |
 |---|---|---|---|
 | 1 | [phase-1-repo-setup.md](2026-04-18-whotalksitron/phase-1-repo-setup.md) | 1 | Customize repo template for Python, set up pyproject.toml, justfile, CI |
-| 2 | [phase-2-core.md](2026-04-18-whotalksitron/phase-2-core.md) | 4 | Core models, config, progress reporting, markdown output |
+| 2 | [phase-2-core.md](2026-04-18-whotalksitron/phase-2-core.md) | 5 | Core models, config, progress reporting, markdown output, retry helper |
 | 3 | [phase-3-backends.md](2026-04-18-whotalksitron/phase-3-backends.md) | 3 | Backend protocol, Gemini backend, Whisper-only backend |
 | 4 | [phase-4-speakers.md](2026-04-18-whotalksitron/phase-4-speakers.md) | 3 | Speaker enrollment, embeddings, voiceprint matching |
 | 5 | [phase-5-integration.md](2026-04-18-whotalksitron/phase-5-integration.md) | 2 | Pipeline orchestration, CLI wiring |
@@ -79,6 +83,7 @@ lefthook.yml                — add fmtcheck for Python
 | Task 2 (models) | `[COMMIT]` |
 | Task 3 (config) | `[COMMIT]` |
 | Tasks 4-5 (progress + output) | `[COMMIT]` |
+| Task 5b (retry helper) | `[COMMIT]` |
 | Phase 2 complete | `[REVIEW:light]` — verify core foundation |
 | Task 6 (backend protocol) | `[COMMIT]` |
 | Task 7 (Gemini backend) | `[COMMIT]` `[REVIEW:normal]` — first working backend |

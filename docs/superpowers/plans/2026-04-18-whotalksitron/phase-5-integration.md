@@ -84,7 +84,7 @@ def test_pipeline_run_with_mock_backend(fake_audio, tmp_path):
     mock_backend.transcribe.return_value = TranscriptResult(
         segments=[
             TranscriptSegment(start=0.0, end=5.0, text="Hello.", speaker="Matt"),
-            TranscriptSegment(start=5.0, end=10.0, text="World.", speaker="Speaker 1"),
+            TranscriptSegment(start=5.0, end=10.0, text="World.", speaker="Speaker 01"),
         ],
         metadata={"model": "test", "backend": "mock"},
     )
@@ -124,7 +124,7 @@ def test_pipeline_result_partial_success(fake_audio, tmp_path):
     output_path = tmp_path / "output.md"
     pipeline = Pipeline(cfg)
 
-    # No diarization in output despite backend supporting it = partial
+    # Segments without speaker attribution despite enrolled speakers = partial
     result = pipeline.run(
         audio_path=fake_audio,
         output_path=output_path,
@@ -134,6 +134,10 @@ def test_pipeline_result_partial_success(fake_audio, tmp_path):
     )
 
     assert output_path.exists()
+    # Speakers enrolled but segment has no speaker attribution = degraded
+    assert result.exit_code == 3
+    assert result.warnings
+    assert "could not be matched" in result.warnings[0]
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -237,6 +241,13 @@ class Pipeline:
         else:
             if progress:
                 progress.stage_complete("voiceprint", "skipped, no speakers enrolled")
+
+        # Check for degraded quality: speakers were enrolled but some remain unmatched
+        if speakers and speakers.speakers and transcript.unmatched_speakers:
+            warnings.append(
+                f"{len(transcript.unmatched_speakers)} speakers could not be matched. "
+                "Run `whotalksitron enroll --rebuild` or add more samples."
+            )
 
         # Stage 5: Format
         if progress:
@@ -521,6 +532,42 @@ def test_config_set(runner, tmp_path):
     assert data["gemini"]["model"] == "gemini-2.5-pro"
 
 
+def test_config_set_malformed(runner, tmp_path):
+    config_file = tmp_path / "config.toml"
+    runner.invoke(main, ["config", "--init"], env={
+        "WHOTALKSITRON_CONFIG": str(config_file),
+    })
+    result = runner.invoke(main, ["config", "--set", "noequals"], env={
+        "WHOTALKSITRON_CONFIG": str(config_file),
+    })
+    assert result.exit_code == 2
+    assert "Invalid format" in result.output
+
+
+def test_config_set_boolean_coercion(runner, tmp_path):
+    config_file = tmp_path / "config.toml"
+    runner.invoke(main, ["config", "--init"], env={
+        "WHOTALKSITRON_CONFIG": str(config_file),
+    })
+    result = runner.invoke(main, ["config", "--set", "defaults.progress=true"], env={
+        "WHOTALKSITRON_CONFIG": str(config_file),
+    })
+    assert result.exit_code == 0
+
+    import tomllib
+    with open(config_file, "rb") as f:
+        data = tomllib.load(f)
+    assert data["defaults"]["progress"] is True
+
+
+def test_config_set_no_config_file(runner, tmp_path):
+    result = runner.invoke(main, ["config", "--set", "gemini.model=test"], env={
+        "WHOTALKSITRON_CONFIG": str(tmp_path / "nonexistent.toml"),
+    })
+    assert result.exit_code == 1
+    assert "No config file" in result.output
+
+
 def test_transcribe_identify_speakers_flag(runner):
     result = runner.invoke(main, ["transcribe", "--help"])
     assert "--identify-speakers" in result.output
@@ -690,6 +737,7 @@ def _run_identify_speakers(
     transcript, audio_path, output_path, podcast, ctx,
 ):
     """Interactive speaker identification after transcription."""
+    import re
     import sys
     from whotalksitron.speakers.extraction import (
         extract_samples_for_speakers,
@@ -699,10 +747,10 @@ def _run_identify_speakers(
     from whotalksitron.speakers.enrollment import SpeakerStore
     from whotalksitron.output import render_transcript
 
-    unmatched = [
+    unmatched = sorted(
         s for s in transcript.speakers
-        if s.startswith("Speaker ")
-    ]
+        if re.match(r"^Speaker \d{2,}$", s)
+    )
     if not unmatched:
         return
 
@@ -767,14 +815,15 @@ def _run_identify_speakers(
                 response = click.prompt("Identify this speaker", default="",
                                         show_default=False)
 
-            clip_path.unlink(missing_ok=True)
-
             if response and response not in ("n", ""):
                 if podcast:
                     store.enroll(response, podcast, clip_path,
                                  compute_embedding=False)
-                    # Extract and enroll all candidate clips
+                    clip_path.unlink(missing_ok=True)
+                    # Extract and enroll all remaining candidate clips
                     for extra_cand in candidates:
+                        if extra_cand is cand:
+                            continue
                         with tempfile.NamedTemporaryFile(suffix=".wav",
                                                          delete=False) as tmp2:
                             extra_path = Path(tmp2.name)
@@ -783,10 +832,14 @@ def _run_identify_speakers(
                         store.enroll(response, podcast, extra_path,
                                      compute_embedding=False)
                         extra_path.unlink(missing_ok=True)
+                else:
+                    clip_path.unlink(missing_ok=True)
 
                 relabel_map[speaker] = response
                 click.echo(f'Enrolled "{response}" for podcast "{podcast}"')
                 break
+
+            clip_path.unlink(missing_ok=True)
 
             if response == "n":
                 continue
