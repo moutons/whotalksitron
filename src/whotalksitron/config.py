@@ -38,6 +38,16 @@ class Config:
     match_threshold: float = 0.7
     timestamp_format: str = "HH:MM:SS"
 
+    log_file: str = ""  # set in __post_init__
+    log_file_max_bytes: int = 10_485_760
+    log_file_backup_count: int = 5
+
+    def __post_init__(self):
+        if not self.log_file:
+            self.log_file = str(
+                Path.home() / ".config" / "whotalksitron" / "whotalksitron.log"
+            )
+
     @property
     def config_dir(self) -> Path:
         return Path.home() / ".config" / "whotalksitron"
@@ -106,6 +116,30 @@ class Config:
         if "timestamp_format" in output:
             cfg.timestamp_format = output["timestamp_format"]
 
+        log = data.get("logging", {})
+        if "file" in log:
+            raw = str(log["file"]).strip()
+            if raw:
+                cfg.log_file = str(Path(raw).expanduser())
+            else:
+                cfg.log_file = ""
+        if "file_max_bytes" in log:
+            val = log["file_max_bytes"]
+            if not (1_048_576 <= val <= 1_073_741_824):
+                logger.warning(
+                    "log_file_max_bytes=%d out of range [1MB, 1GB], using default", val
+                )
+            else:
+                cfg.log_file_max_bytes = val
+        if "file_backup_count" in log:
+            val = log["file_backup_count"]
+            if not (1 <= val <= 10):
+                logger.warning(
+                    "log_file_backup_count=%d out of range [1, 10], using default", val
+                )
+            else:
+                cfg.log_file_backup_count = val
+
         return cfg
 
     @classmethod
@@ -142,6 +176,9 @@ class Config:
         lines.append(f"whisper.model = {self.whisper_model!r}")
 
         lines.append(f"speakers.match_threshold = {self.match_threshold!r}")
+        lines.append(f"logging.file = {self.log_file!r}")
+        lines.append(f"logging.file_max_bytes = {self.log_file_max_bytes!r}")
+        lines.append(f"logging.file_backup_count = {self.log_file_backup_count!r}")
         return "\n".join(lines)
 
     def write_default(self, path: Path) -> None:
@@ -176,6 +213,13 @@ class Config:
             },
             "output": {
                 "timestamp_format": self.timestamp_format,
+            },
+            "logging": {
+                "file": str(
+                    Path.home() / ".config" / "whotalksitron" / "whotalksitron.log"
+                ),
+                "file_max_bytes": self.log_file_max_bytes,
+                "file_backup_count": self.log_file_backup_count,
             },
         }
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -156,6 +156,66 @@ def test_config_env_beats_keychain(monkeypatch):
     assert cfg.gemini_api_key == "env-key"
 
 
+_DEFAULT_LOG_FILE = str(Path.home() / ".config" / "whotalksitron" / "whotalksitron.log")
+
+
+def test_default_config_logging_fields():
+    cfg = Config()
+    assert cfg.log_file == _DEFAULT_LOG_FILE
+    assert cfg.log_file_max_bytes == 10_485_760
+    assert cfg.log_file_backup_count == 5
+
+
+def test_config_from_dict_logging():
+    cfg = Config.from_dict(
+        {
+            "logging": {
+                "file": "/tmp/test.log",  # noqa: S108
+                "file_max_bytes": 5_000_000,
+                "file_backup_count": 3,
+            }
+        }
+    )
+    assert cfg.log_file == "/tmp/test.log"  # noqa: S108
+    assert cfg.log_file_max_bytes == 5_000_000
+    assert cfg.log_file_backup_count == 3
+
+
+def test_config_logging_tilde_expansion():
+    cfg = Config.from_dict({"logging": {"file": "~/custom.log"}})
+    assert cfg.log_file == str(Path.home() / "custom.log")
+
+
+def test_config_logging_empty_disables():
+    cfg = Config.from_dict({"logging": {"file": ""}})
+    assert cfg.log_file == ""
+
+
+def test_config_logging_whitespace_disables():
+    cfg = Config.from_dict({"logging": {"file": "  "}})
+    assert cfg.log_file == ""
+
+
+def test_config_logging_max_bytes_floor():
+    cfg = Config.from_dict({"logging": {"file_max_bytes": 100}})
+    assert cfg.log_file_max_bytes == 10_485_760  # falls back to default
+
+
+def test_config_logging_max_bytes_ceiling():
+    cfg = Config.from_dict({"logging": {"file_max_bytes": 2_000_000_000}})
+    assert cfg.log_file_max_bytes == 10_485_760  # falls back to default
+
+
+def test_config_logging_backup_count_floor():
+    cfg = Config.from_dict({"logging": {"file_backup_count": 0}})
+    assert cfg.log_file_backup_count == 5  # falls back to default
+
+
+def test_config_logging_backup_count_ceiling():
+    cfg = Config.from_dict({"logging": {"file_backup_count": 50}})
+    assert cfg.log_file_backup_count == 5  # falls back to default
+
+
 def test_config_1password_retrieval(monkeypatch, tmp_path):
     from unittest.mock import MagicMock, patch
 
