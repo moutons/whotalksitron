@@ -8,9 +8,27 @@ version = "0.1.0"
 description = "Audio transcription CLI with speaker identification"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-authors = [
-    { name = "Shaun Mouton", email = "shaun.mouton@icloud.com" },
+readme = "README.md"
+keywords = ["audio", "transcription", "speaker-identification", "podcast", "gemini"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
+authors = [
+    { name = "Shaun Mouton", email = "sdmouton+pypi@gmail.com" },
+]
+
+[project.urls]
+Homepage = "https://github.com/moutons/whotalksitron"
+Repository = "https://github.com/moutons/whotalksitron"
+Issues = "https://github.com/moutons/whotalksitron/issues"
+Changelog = "https://github.com/moutons/whotalksitron/blob/main/CHANGELOG.md"
+
 dependencies = [
     "click>=8.1,<9",
     "tomli-w>=1.0,<2",
