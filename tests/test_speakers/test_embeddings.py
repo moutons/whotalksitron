@@ -55,5 +55,5 @@ def test_average_embeddings_empty():
 
 
 def test_embedding_computer_protocol():
-    assert "compute" in EmbeddingComputer.__protocol_attrs__  # type: ignore[attr-defined]
-    assert "is_available" in EmbeddingComputer.__protocol_attrs__  # type: ignore[attr-defined]
+    assert hasattr(EmbeddingComputer, "compute")
+    assert hasattr(EmbeddingComputer, "is_available")
