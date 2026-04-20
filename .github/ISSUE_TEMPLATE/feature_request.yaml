@@ -1,0 +1,47 @@
+name: Feature Request
+description: Propose a new feature or enhancement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: user_story
+    attributes:
+      label: User story
+      description: "Describe the feature as: As a ..., I want ..., so that ..."
+      placeholder: "As a [role], I want [feature], so that [benefit]."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: Checklist of conditions that must be true when this feature is complete
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Technical or business constraints to consider
+    validations:
+      required: false
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+  - type: input
+    id: affected_areas
+    attributes:
+      label: Affected areas
+      description: Modules or file paths this feature would touch
+      placeholder: "e.g., src/whotalksitron/backends/, docs/"
+    validations:
+      required: false

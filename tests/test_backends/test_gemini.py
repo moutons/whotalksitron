@@ -139,9 +139,7 @@ def test_parse_response_mixed_formats():
 
 
 def test_parse_response_speaker_lowercase_text():
-    response_text = (
-        "[ 10m55s23ms ] Speaker 02: thanks for making my joke.\n"
-    )
+    response_text = "[ 10m55s23ms ] Speaker 02: thanks for making my joke.\n"
     segments = _parse_response(response_text)
     assert len(segments) == 1
     assert segments[0].speaker == "Speaker 02"
