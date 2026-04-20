@@ -31,7 +31,7 @@ jobs:
 
       - name: Publish to PyPI
         if: steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@1aa9f41fac5d531e6764e1991b536783337f3a56 # v9.21.1
+        uses: python-semantic-release/publish-action@310a9983a0ae878b29f3aac778d7c77c1db27378 # v10.5.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           repository-url: https://upload.pypi.org/legacy/
