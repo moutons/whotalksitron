@@ -34,6 +34,10 @@ clean:
     find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
     find . -name "*.pyc" -delete 2>/dev/null || true
 
+# Install as a tool using uv
+install:
+    uv tool install . --force --reinstall
+
 # --- CI sub-recipes (hidden from `just --list`) ---
 
 _ci_mdlint:
