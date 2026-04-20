@@ -9,6 +9,85 @@ from click.testing import CliRunner
 from whotalksitron.cli import main
 
 
+def test_invocation_logged_to_file(tmp_path):
+    log_file = tmp_path / "test.log"
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {"logging": {"file": str(log_file)}}
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["--log-level", "info", "config", "--show"],
+        env={"WHOTALKSITRON_CONFIG": str(config_file)},
+    )
+    assert result.exit_code == 0
+
+    lines = log_file.read_text().strip().split("\n")
+    records = [json.loads(line) for line in lines if line.strip()]
+    invocations = [r for r in records if r.get("message") == "invocation"]
+    assert len(invocations) == 1
+    assert "argv" in invocations[0]
+    assert "version" in invocations[0]
+
+
+def test_invocation_sanitizes_secrets(tmp_path):
+    log_file = tmp_path / "test.log"
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {"logging": {"file": str(log_file)}}
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["config", "--show"],
+        env={"WHOTALKSITRON_CONFIG": str(config_file)},
+    )
+    assert result.exit_code == 0
+
+    # Verify sanitization function works directly
+    from whotalksitron.cli import _sanitize_argv
+
+    argv = ["transcribe", "--api-key", "secret123", "--backend", "gemini"]
+    sanitized = _sanitize_argv(argv)
+    assert sanitized == ["transcribe", "--api-key", "***", "--backend", "gemini"]
+
+
+def test_sanitize_argv_no_secrets():
+    from whotalksitron.cli import _sanitize_argv
+
+    argv = ["transcribe", "--backend", "gemini", "episode.mp3"]
+    assert _sanitize_argv(argv) == argv
+
+
+def test_sanitize_argv_multiple_secrets():
+    from whotalksitron.cli import _sanitize_argv
+
+    argv = ["--api-key", "s1", "--token", "s2", "--password", "s3", "file.mp3"]
+    sanitized = _sanitize_argv(argv)
+    assert sanitized == [
+        "--api-key",
+        "***",
+        "--token",
+        "***",
+        "--password",
+        "***",
+        "file.mp3",
+    ]
+
+
+def test_sanitize_argv_equals_form():
+    from whotalksitron.cli import _sanitize_argv
+
+    argv = ["--api-key=secret123", "--backend", "gemini"]
+    sanitized = _sanitize_argv(argv)
+    assert sanitized[0] == "--api-key=***"
+
+
 @pytest.fixture
 def runner():
     return CliRunner()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from datetime import UTC
 from pathlib import Path
@@ -17,9 +18,38 @@ logger = logging.getLogger(__name__)
 
 _CONSOLE_HANDLER_NAME = "whotalksitron_console"
 
+_SECRET_FLAG_PATTERN = re.compile(
+    r"-{1,2}[a-z_-]*(key|token|secret|password)[a-z_-]*", re.IGNORECASE
+)
+
+
+def _sanitize_argv(argv: list[str]) -> list[str]:
+    result = []
+    redact_next = False
+    for arg in argv:
+        if redact_next:
+            result.append("***")
+            redact_next = False
+            continue
+        if "=" in arg:
+            flag, _, _value = arg.partition("=")
+            if _SECRET_FLAG_PATTERN.fullmatch(flag):
+                result.append(f"{flag}=***")
+                continue
+        if _SECRET_FLAG_PATTERN.fullmatch(arg):
+            result.append(arg)
+            redact_next = True
+            continue
+        result.append(arg)
+    return result
+
+
+def _numeric_level(level: str) -> int:
+    return getattr(logging, level.upper(), logging.INFO)
+
 
 def _setup_logging(level: str, fmt: str) -> None:
-    numeric = getattr(logging, level.upper(), logging.INFO)
+    numeric = _numeric_level(level)
 
     # Remove only the console handler, preserve file and other handlers
     for h in logging.root.handlers[:]:
@@ -28,6 +58,7 @@ def _setup_logging(level: str, fmt: str) -> None:
 
     handler = logging.StreamHandler(sys.stderr)
     handler.set_name(_CONSOLE_HANDLER_NAME)
+    handler.setLevel(numeric)  # console handler filters by level
     if fmt == "json":
         import json
 
@@ -45,7 +76,7 @@ def _setup_logging(level: str, fmt: str) -> None:
     else:
         handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
     logging.root.addHandler(handler)
-    logging.root.setLevel(numeric)
+    logging.root.setLevel(logging.DEBUG)  # root passes everything; handlers filter
 
 
 _FILE_HANDLER_NAME = "whotalksitron_file"
@@ -185,6 +216,29 @@ def _init_context(ctx, log_level, log_format, progress, quiet):
     ctx.obj["config"] = cfg
     ctx.obj["progress"] = progress or cfg.progress
     ctx.obj["quiet"] = quiet
+
+    # Set up file logging (once per process)
+    if not any(h.get_name() == _FILE_HANDLER_NAME for h in logging.root.handlers):
+        file_handler = _setup_file_logging(
+            cfg.log_file, cfg.log_file_max_bytes, cfg.log_file_backup_count
+        )
+        if file_handler:
+            logging.root.addHandler(file_handler)
+
+    # Log invocation record
+    argv = sys.argv[1:] if len(sys.argv) > 1 else []
+    record = logger.makeRecord(
+        logger.name,
+        logging.INFO,
+        "",
+        0,
+        "invocation",
+        (),
+        None,
+    )
+    record.argv = _sanitize_argv(argv)
+    record.version = __version__
+    logger.handle(record)
 
 
 def with_global_options(fn):
