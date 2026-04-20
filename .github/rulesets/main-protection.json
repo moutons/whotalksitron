@@ -1,5 +1,5 @@
 {
-  "name": "Protect main",
+  "name": "main-protection",
   "target": "branch",
   "enforcement": "active",
   "conditions": {
@@ -12,6 +12,11 @@
     {
       "actor_type": "RepositoryRole",
       "actor_id": 5,
+      "bypass_mode": "always"
+    },
+    {
+      "actor_type": "Integration",
+      "actor_id": 2869468,
       "bypass_mode": "always"
     }
   ],
