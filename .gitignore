@@ -12,6 +12,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.envrc.local
 
 # Build artifacts
 dist/
@@ -19,6 +20,7 @@ build/
 target/
 bin/
 out/
+.codemap/
 
 # Dependencies
 node_modules/
