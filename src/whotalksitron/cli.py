@@ -236,7 +236,7 @@ def _init_context(ctx, log_level, log_format, progress, quiet):
     argv = sys.argv[1:] if len(sys.argv) > 1 else []
     record = logger.makeRecord(
         logger.name,
-        logging.INFO,
+        logging.DEBUG,
         "",
         0,
         "invocation",

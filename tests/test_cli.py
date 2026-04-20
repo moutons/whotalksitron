@@ -408,6 +408,23 @@ def test_console_filter_blocks_third_party_even_at_debug():
     assert not console.filter(record)
 
 
+def test_invocation_not_shown_at_info_level(runner, tmp_path):
+    """Invocation record must not appear on console at default info level."""
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {"logging": {"file": ""}}
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    result = runner.invoke(
+        main,
+        ["config", "--show"],
+        env={"WHOTALKSITRON_CONFIG": str(config_file)},
+    )
+    assert result.exit_code == 0
+    assert "invocation" not in result.output
+
+
 def test_setup_logging_preserves_non_console_handlers():
     """_setup_logging must only replace the console handler, not clear all handlers."""
     import logging
