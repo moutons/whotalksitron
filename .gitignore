@@ -40,6 +40,9 @@ htmlcov/
 # Worktrees
 .worktrees/
 
+# Private
+.private-journal/
+
 # Logs
 *.log
 debug*.txt
