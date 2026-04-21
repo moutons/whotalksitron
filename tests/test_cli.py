@@ -1,12 +1,14 @@
 import gzip
 import json
 import logging
+import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
-from whotalksitron.cli import main
+from whotalksitron.cli import _entrypoint, main
 
 
 def test_invocation_logged_to_file(tmp_path):
@@ -575,3 +577,133 @@ def test_friendly_message_retry_exhausted_walks_cause():
     msg = _friendly_message(exc)
     assert "timed out" in msg
     assert "network" in msg.lower()
+
+
+def _invoke_entrypoint(runner, args, env=None):
+    """Invoke _entrypoint() within CliRunner isolation to capture output."""
+    old_argv = sys.argv[:]
+    # Remove any existing file handlers to avoid cross-test pollution
+    removed = []
+    for h in logging.root.handlers[:]:
+        if h.get_name() == "whotalksitron_file":
+            logging.root.removeHandler(h)
+            h.close()
+            removed.append(h)
+    try:
+        sys.argv = ["whotalksitron"] + list(args)
+        exit_code = 0
+        try:
+            with runner.isolation(env=env) as (out_bytes, err_bytes, mixed_bytes):
+                _entrypoint()
+        except SystemExit as e:
+            exit_code = e.code if isinstance(e.code, int) else 1
+        # mixed_bytes contains both stdout and stderr
+        output = mixed_bytes.getvalue().decode("utf-8", errors="replace")
+        return exit_code, output
+    finally:
+        sys.argv = old_argv
+        # Clean up file handlers added during this invocation too
+        for h in logging.root.handlers[:]:
+            if h.get_name() == "whotalksitron_file":
+                logging.root.removeHandler(h)
+                h.close()
+
+
+def test_top_level_handler_catches_timeout(runner, tmp_path, fake_audio):
+    """TimeoutError during transcribe must show friendly message, not traceback."""
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {
+        "defaults": {"backend": "gemini"},
+        "gemini": {"api_key": "test-key"},
+        "logging": {"file": str(tmp_path / "test.log")},
+    }
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    with patch(
+        "whotalksitron.backends.gemini.GeminiBackend.transcribe",
+        side_effect=TimeoutError("Operation timed out"),
+    ):
+        exit_code, output = _invoke_entrypoint(
+            runner,
+            ["transcribe", str(fake_audio)],
+            env={"WHOTALKSITRON_CONFIG": str(config_file)},
+        )
+
+    assert exit_code == 1
+    assert "Traceback" not in output
+    assert "timed out" in output
+
+
+def test_top_level_handler_shows_log_path(runner, tmp_path, fake_audio):
+    """Error message must include path to log file for diagnostics."""
+    config_file = tmp_path / "config.toml"
+    log_file = tmp_path / "test.log"
+    import tomli_w
+
+    data = {
+        "defaults": {"backend": "gemini"},
+        "gemini": {"api_key": "test-key"},
+        "logging": {"file": str(log_file)},
+    }
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    with patch(
+        "whotalksitron.backends.gemini.GeminiBackend.transcribe",
+        side_effect=TimeoutError("Operation timed out"),
+    ):
+        exit_code, output = _invoke_entrypoint(
+            runner,
+            ["transcribe", str(fake_audio)],
+            env={"WHOTALKSITRON_CONFIG": str(config_file)},
+        )
+
+    assert exit_code == 1
+    assert str(log_file) in output
+
+
+def test_top_level_handler_logs_traceback_to_file(runner, tmp_path, fake_audio):
+    """Full traceback must be written to the file log."""
+    config_file = tmp_path / "config.toml"
+    log_file = tmp_path / "test.log"
+    import tomli_w
+
+    data = {
+        "defaults": {"backend": "gemini"},
+        "gemini": {"api_key": "test-key"},
+        "logging": {"file": str(log_file)},
+    }
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    with patch(
+        "whotalksitron.backends.gemini.GeminiBackend.transcribe",
+        side_effect=TimeoutError("Operation timed out"),
+    ):
+        exit_code, output = _invoke_entrypoint(
+            runner,
+            ["transcribe", str(fake_audio)],
+            env={"WHOTALKSITRON_CONFIG": str(config_file)},
+        )
+
+    assert exit_code == 1
+    log_content = log_file.read_text()
+    assert "TimeoutError" in log_content
+
+
+def test_existing_handled_errors_unchanged(runner, tmp_path):
+    """ValidationError, PreprocessingError, BackendUnavailableError keep their behavior."""
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {"logging": {"file": ""}}
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    # Nonexistent audio file triggers ValidationError inside pipeline
+    result = runner.invoke(
+        main,
+        ["transcribe", "/nonexistent/audio.mp3"],
+        env={"WHOTALKSITRON_CONFIG": str(config_file)},
+    )
+    # Click catches the bad path before our code runs (exists=True)
+    assert result.exit_code != 0

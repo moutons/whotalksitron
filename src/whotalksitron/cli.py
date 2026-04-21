@@ -188,7 +188,22 @@ def _setup_logging(level: str, fmt: str) -> None:
 
         handler.setFormatter(JsonFormatter())
     else:
-        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        class _ConsoleFormatter(logging.Formatter):
+            """Plain text formatter that suppresses tracebacks on console."""
+
+            def format(self, record: logging.LogRecord) -> str:
+                # Temporarily clear exc_info so the traceback is not emitted to console
+                saved_exc_info = record.exc_info
+                saved_exc_text = record.exc_text
+                record.exc_info = None
+                record.exc_text = None
+                try:
+                    return super().format(record)
+                finally:
+                    record.exc_info = saved_exc_info
+                    record.exc_text = saved_exc_text
+
+        handler.setFormatter(_ConsoleFormatter("%(levelname)s %(name)s: %(message)s"))
     logging.root.addHandler(handler)
     logging.root.setLevel(logging.DEBUG)  # root passes everything; handlers filter
 
@@ -272,6 +287,9 @@ def _setup_file_logging(
                 data["argv"] = record.argv
             if hasattr(record, "version"):
                 data["version"] = record.version
+            if record.exc_info:
+                import traceback as tb_mod
+                data["traceback"] = "".join(tb_mod.format_exception(*record.exc_info))
             return json.dumps(data)
 
     handler.setFormatter(FileJsonFormatter())
@@ -712,5 +730,37 @@ def _coerce_value(value: str) -> object:
     return value
 
 
+def _current_log_path() -> str | None:
+    for h in logging.root.handlers:
+        if h.get_name() == _FILE_HANDLER_NAME:
+            path = getattr(h, "baseFilename", None)
+            if path:
+                return path
+    return None
+
+
+def _entrypoint() -> None:
+    try:
+        main(standalone_mode=False)
+    except click.exceptions.Exit as e:
+        sys.exit(e.code)
+    except click.exceptions.Abort:
+        click.echo("Aborted.", err=True)
+        sys.exit(1)
+    except click.exceptions.UsageError as e:
+        e.show()
+        sys.exit(e.exit_code)
+    except Exception as e:
+        logger.exception("Unhandled exception")
+        msg = _friendly_message(e)
+        click.echo(f"Error: {msg}", err=True)
+        log_path = _current_log_path()
+        if log_path:
+            click.echo(f"Details: {log_path}", err=True)
+        else:
+            click.echo("Use --log-level debug for details.", err=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    main()
+    _entrypoint()
