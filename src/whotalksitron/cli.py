@@ -62,7 +62,7 @@ def _friendly_message(exc: Exception) -> str:
         from google.genai.errors import ClientError, ServerError
 
         if isinstance(exc, ClientError):
-            code = getattr(exc, "status_code", 0) or 0
+            code = getattr(exc, "code", 0) or 0
             if code == 401:
                 return (
                     "Authentication failed. Check your API key or run: "
@@ -74,7 +74,7 @@ def _friendly_message(exc: Exception) -> str:
                 return "Rate limited by Gemini API. Wait a moment and try again."
             return f"Gemini API error ({code}): {exc}"
         if isinstance(exc, ServerError):
-            code = getattr(exc, "status_code", 0) or 0
+            code = getattr(exc, "code", 0) or 0
             return f"Gemini API server error ({code}). Try again later."
     except ImportError:
         pass
@@ -100,14 +100,7 @@ def _friendly_message(exc: Exception) -> str:
         from google.api_core.exceptions import GoogleAPIError
 
         if isinstance(exc, GoogleAPIError):
-            msg = str(exc)
-            # Try to extract bucket name from the error message
-            bucket = ""
-            if "bucket" in msg.lower():
-                bucket = msg
-            if bucket:
-                return f"Failed to upload to GCS: {msg}"
-            return f"Google Cloud Storage error: {msg}"
+            return f"Google Cloud Storage error: {exc}"
     except ImportError:
         pass
 

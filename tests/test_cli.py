@@ -512,6 +512,59 @@ def test_friendly_message_gcs_error():
     assert "my-bucket" in msg
 
 
+def test_friendly_message_gemini_client_error_401():
+    from whotalksitron.cli import _friendly_message
+    try:
+        from google.genai.errors import ClientError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ClientError.__new__(ClientError)
+    exc.code = 401
+    exc.message = "Unauthorized"
+    msg = _friendly_message(exc)
+    assert "Authentication failed" in msg
+    assert "gcloud auth" in msg
+
+
+def test_friendly_message_gemini_client_error_429():
+    from whotalksitron.cli import _friendly_message
+    try:
+        from google.genai.errors import ClientError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ClientError.__new__(ClientError)
+    exc.code = 429
+    exc.message = "Rate limited"
+    msg = _friendly_message(exc)
+    assert "Rate limited" in msg
+
+
+def test_friendly_message_gemini_server_error():
+    from whotalksitron.cli import _friendly_message
+    try:
+        from google.genai.errors import ServerError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ServerError.__new__(ServerError)
+    exc.code = 500
+    exc.message = "Internal Server Error"
+    msg = _friendly_message(exc)
+    assert "server error" in msg.lower()
+    assert "500" in msg
+
+
+def test_friendly_message_runtime_error_pyannote():
+    from whotalksitron.cli import _friendly_message
+
+    exc = RuntimeError("pyannote model failed to load speakers")
+    msg = _friendly_message(exc)
+    assert "Pyannote error" in msg
+    assert "--backend gemini" in msg
+
+
 def test_friendly_message_retry_exhausted_walks_cause():
     from whotalksitron.cli import _friendly_message
     from whotalksitron.retry import RetryExhausted
