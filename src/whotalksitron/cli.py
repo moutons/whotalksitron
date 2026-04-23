@@ -743,7 +743,7 @@ def _entrypoint() -> None:
     try:
         main(standalone_mode=False)
     except click.exceptions.Exit as e:
-        sys.exit(e.code)
+        sys.exit(e.exit_code)
     except click.exceptions.Abort:
         click.echo("Aborted.", err=True)
         sys.exit(1)

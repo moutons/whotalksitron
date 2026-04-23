@@ -583,17 +583,15 @@ def _invoke_entrypoint(runner, args, env=None):
     """Invoke _entrypoint() within CliRunner isolation to capture output."""
     old_argv = sys.argv[:]
     # Remove any existing file handlers to avoid cross-test pollution
-    removed = []
     for h in logging.root.handlers[:]:
         if h.get_name() == "whotalksitron_file":
             logging.root.removeHandler(h)
             h.close()
-            removed.append(h)
     try:
         sys.argv = ["whotalksitron"] + list(args)
         exit_code = 0
         try:
-            with runner.isolation(env=env) as (out_bytes, err_bytes, mixed_bytes):
+            with runner.isolation(env=env) as (out_bytes, _err_bytes, mixed_bytes):
                 _entrypoint()
         except SystemExit as e:
             exit_code = e.code if isinstance(e.code, int) else 1
