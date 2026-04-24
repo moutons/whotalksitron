@@ -146,8 +146,7 @@ def _friendly_message(exc: Exception) -> str:
         msg = str(exc)
         if any(kw in msg.lower() for kw in ("cuda", "torch", "pyannote")):
             return (
-                f"Pyannote error: {msg}. "
-                "Try --backend gemini or check device settings."
+                f"Pyannote error: {msg}. Try --backend gemini or check device settings."
             )
         return msg
 
@@ -188,6 +187,7 @@ def _setup_logging(level: str, fmt: str) -> None:
 
         handler.setFormatter(JsonFormatter())
     else:
+
         class _ConsoleFormatter(logging.Formatter):
             """Plain text formatter that suppresses tracebacks on console."""
 

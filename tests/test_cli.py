@@ -516,6 +516,7 @@ def test_friendly_message_gcs_error():
 
 def test_friendly_message_gemini_client_error_401():
     from whotalksitron.cli import _friendly_message
+
     try:
         from google.genai.errors import ClientError
     except ImportError:
@@ -531,6 +532,7 @@ def test_friendly_message_gemini_client_error_401():
 
 def test_friendly_message_gemini_client_error_429():
     from whotalksitron.cli import _friendly_message
+
     try:
         from google.genai.errors import ClientError
     except ImportError:
@@ -545,6 +547,7 @@ def test_friendly_message_gemini_client_error_429():
 
 def test_friendly_message_gemini_server_error():
     from whotalksitron.cli import _friendly_message
+
     try:
         from google.genai.errors import ServerError
     except ImportError:
@@ -575,9 +578,7 @@ def test_atexit_removes_file_handler(tmp_path):
 
     log_file = tmp_path / "test.log"
     registered = []
-    with patch.object(
-        atexit, "register", side_effect=lambda fn: registered.append(fn)
-    ):
+    with patch.object(atexit, "register", side_effect=lambda fn: registered.append(fn)):
         handler = _setup_file_logging(
             str(log_file), max_bytes=1_048_576, backup_count=3
         )
@@ -645,10 +646,10 @@ def _invoke_entrypoint(runner, args, env=None):
             logging.root.removeHandler(h)
             h.close()
     try:
-        sys.argv = ["whotalksitron"] + list(args)
+        sys.argv = ["whotalksitron", *list(args)]
         exit_code = 0
         try:
-            with runner.isolation(env=env) as (out_bytes, _err_bytes, mixed_bytes):
+            with runner.isolation(env=env) as (_out_bytes, _err_bytes, mixed_bytes):
                 _entrypoint()
         except SystemExit as e:
             exit_code = e.code if isinstance(e.code, int) else 1
@@ -735,7 +736,7 @@ def test_top_level_handler_logs_traceback_to_file(runner, tmp_path, fake_audio):
         "whotalksitron.backends.gemini.GeminiBackend.transcribe",
         side_effect=TimeoutError("Operation timed out"),
     ):
-        exit_code, output = _invoke_entrypoint(
+        exit_code, _output = _invoke_entrypoint(
             runner,
             ["transcribe", str(fake_audio)],
             env={"WHOTALKSITRON_CONFIG": str(config_file)},
@@ -747,7 +748,7 @@ def test_top_level_handler_logs_traceback_to_file(runner, tmp_path, fake_audio):
 
 
 def test_existing_handled_errors_unchanged(runner, tmp_path):
-    """ValidationError, PreprocessingError, BackendUnavailableError keep their behavior."""
+    """ValidationError, PreprocessingError, BackendUnavailableError keep behavior."""
     config_file = tmp_path / "config.toml"
     import tomli_w
 
@@ -762,3 +763,37 @@ def test_existing_handled_errors_unchanged(runner, tmp_path):
     )
     # Click catches the bad path before our code runs (exists=True)
     assert result.exit_code != 0
+
+
+def test_no_traceback_on_any_error(runner, tmp_path, fake_audio):
+    """No exception type should produce a raw traceback on the console."""
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {
+        "defaults": {"backend": "gemini"},
+        "gemini": {"api_key": "test-key"},
+        "logging": {"file": ""},
+    }
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    errors = [
+        TimeoutError("test"),
+        RuntimeError("test"),
+        OSError("test"),
+        ValueError("test"),
+    ]
+
+    for exc in errors:
+        with patch(
+            "whotalksitron.backends.gemini.GeminiBackend.transcribe",
+            side_effect=exc,
+        ):
+            exit_code, output = _invoke_entrypoint(
+                runner,
+                ["transcribe", str(fake_audio)],
+                env={"WHOTALKSITRON_CONFIG": str(config_file)},
+            )
+        assert exit_code == 1, f"Expected exit 1 for {type(exc).__name__}"
+        assert "Traceback" not in output, f"Traceback leaked for {type(exc).__name__}"
+        assert "Error:" in output, f"No friendly error for {type(exc).__name__}"
