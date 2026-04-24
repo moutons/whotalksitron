@@ -570,6 +570,56 @@ def test_friendly_message_runtime_error_pyannote():
     assert "--backend gemini" in msg
 
 
+def test_friendly_message_gemini_client_error_404():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.genai.errors import ClientError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ClientError.__new__(ClientError)
+    exc.code = 404
+    exc.message = "Model not found"
+    msg = _friendly_message(exc)
+    assert "Model not found" in msg
+    assert "gemini.model" in msg
+
+
+def test_friendly_message_default_credentials_error():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.auth.exceptions import DefaultCredentialsError
+    except ImportError:
+        pytest.skip("google-auth not installed")
+
+    exc = DefaultCredentialsError("Could not find default credentials")
+    msg = _friendly_message(exc)
+    assert "gcloud auth" in msg
+
+
+def test_friendly_message_httpx_connect_error():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    request = httpx.Request("GET", "https://api.example.com/v1")
+    exc = httpx.ConnectError("Connection refused", request=request)
+    msg = _friendly_message(exc)
+    assert "api.example.com" in msg
+    assert "network" in msg.lower()
+
+
+def test_friendly_message_generic_import_error():
+    from whotalksitron.cli import _friendly_message
+
+    exc = ImportError("No module named 'foobar'")
+    msg = _friendly_message(exc)
+    assert "Missing dependency" in msg
+    assert "foobar" in msg
+
+
 def test_atexit_removes_file_handler(tmp_path):
     """atexit handler must remove the file handler from root logger."""
     import atexit
