@@ -1,0 +1,71 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: [bug]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One-line description of the bug
+      placeholder: "e.g., Transcription fails on files larger than 100MB"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps to reproduce the bug
+      placeholder: |
+        1. Run `whotalksitron transcribe large-file.mp3`
+        2. Observe error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happens instead
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "OS, Python version, whotalksitron version"
+      placeholder: "e.g., macOS 15.4, Python 3.12, whotalksitron 0.1.0"
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Stack trace / logs
+      description: Paste any relevant error output or log file contents
+      render: shell
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - critical
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+  - type: input
+    id: affected_files
+    attributes:
+      label: Affected files
+      description: File paths related to the bug (if known)
+      placeholder: "e.g., src/whotalksitron/backends/gemini.py"
+    validations:
+      required: false

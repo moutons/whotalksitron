@@ -2,17 +2,15 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - "v*"
 
 jobs:
-  release:
+  build-publish:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.FORGEJO_TOKEN }}
 
       - name: Install just 1.40.0
         run: |
@@ -31,44 +29,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
-      - name: Configure git
-        run: |
-          git config user.name "forgejo-actions[bot]"
-          git config user.email "forgejo-actions[bot]@noreply.localhost"
-
-      - name: Semantic Release (version + changelog + tag)
-        id: release
-        env:
-          GH_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
-        run: |
-          OUTPUT=$(uv run semantic-release version \
-            -D remote.type=gitea \
-            -D "remote.url=${{ github.server_url }}/${{ github.repository }}" \
-            -D remote.token="${GH_TOKEN}" 2>&1) || true
-          echo "${OUTPUT}"
-          if echo "${OUTPUT}" | grep -q "No release will be made"; then
-            echo "released=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "released=true" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Run CI checks
+        run: just ensureci
 
       - name: Build
-        if: steps.release.outputs.released == 'true'
         run: just build
 
       - name: Publish to Forgejo PyPI
-        if: steps.release.outputs.released == 'true'
         run: >
           uv publish
           --publish-url "${{ github.server_url }}/api/packages/${{ github.repository_owner }}/pypi"
           --token "${{ secrets.FORGEJO_TOKEN }}"
-
-      - name: Create Forgejo release
-        if: steps.release.outputs.released == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
-        run: >
-          uv run semantic-release publish
-          -D remote.type=gitea
-          -D "remote.url=${{ github.server_url }}/${{ github.repository }}"
-          -D remote.token="${GH_TOKEN}"

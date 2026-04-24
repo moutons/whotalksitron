@@ -44,6 +44,29 @@ Key recipes:
 - `just ensureci` -- full CI simulation
 - `just ensureci-sandbox` -- sandbox-safe CI (no network-dependent checks)
 
+## Conventional Commits
+
+All commit messages must follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. This is enforced by a `commit-msg` lefthook hook.
+
+Format: `<type>(<optional scope>): <description>`
+
+Allowed types:
+
+- `feat` -- new feature (triggers minor version bump)
+- `fix` -- bug fix (triggers patch version bump)
+- `perf` -- performance improvement (triggers patch version bump)
+- `refactor` -- code change that neither fixes a bug nor adds a feature
+- `docs` -- documentation only
+- `style` -- formatting, whitespace, etc.
+- `test` -- adding or updating tests
+- `build` -- build system or dependencies
+- `ci` -- CI configuration
+- `chore` -- maintenance tasks
+
+Breaking changes: add `!` after the type/scope (e.g., `feat!: remove legacy API`) or include `BREAKING CHANGE:` in the commit body. This triggers a major version bump.
+
+Scopes are optional but encouraged for clarity (e.g., `feat(cli):`, `fix(gemini):`).
+
 ## Architecture Decision Records
 
 Non-obvious decisions go in `docs/decisions/` as lightweight ADRs.

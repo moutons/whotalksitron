@@ -1,0 +1,46 @@
+name: Test Gap
+description: Report untested code paths that need coverage
+labels: [testing]
+body:
+  - type: textarea
+    id: uncovered_path
+    attributes:
+      label: Uncovered code path
+      description: What behavior or code path is not tested
+    validations:
+      required: true
+  - type: textarea
+    id: file_references
+    attributes:
+      label: File references
+      description: Paths to the untested code
+      placeholder: |
+        - src/whotalksitron/backends/gemini.py:110-143
+        - src/whotalksitron/pipeline.py:55-73
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_approach
+    attributes:
+      label: Suggested approach
+      description: How you would test this (test strategy, fixtures needed, etc.)
+    validations:
+      required: false
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+  - type: input
+    id: blocking_issues
+    attributes:
+      label: Blocking issues
+      description: Related issues that block or depend on this test work
+      placeholder: "#123, #456"
+    validations:
+      required: false

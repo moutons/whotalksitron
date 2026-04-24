@@ -15,14 +15,14 @@ fmt:
 
 # Security audit (gitleaks + ruff security rules)
 secaudit: _ci_secaudit
-    gitleaks git --platform gitea .
+    gitleaks git --platform gitea --platform github .
 
 # Full CI simulation
-ensureci: _ci_mdlint _ci_lint _ci_fmtcheck _ci_vulncheck _ci_secaudit _ci_typecheck _ci_testcover
+ensureci: _ci_mdlint _ci_lint _ci_fmtcheck _ci_vulncheck _ci_liccheck _ci_secaudit _ci_typecheck _ci_testcover _ci_workflows
     @echo "All CI checks passed!"
 
 # Sandbox-safe CI (no TLS-dependent checks)
-ensureci-sandbox: _ci_mdlint _ci_lint _ci_fmtcheck _ci_secaudit _ci_typecheck _ci_testcover
+ensureci-sandbox: _ci_mdlint _ci_lint _ci_fmtcheck _ci_liccheck _ci_secaudit _ci_typecheck _ci_testcover _ci_workflows
     @echo "All sandbox-compatible CI checks passed! (vulncheck skipped)"
 
 # Quick validation
@@ -54,7 +54,10 @@ _ci_fmtcheck:
     uv run ruff format --check .
 
 _ci_vulncheck:
-    @echo "_ci_vulncheck: not yet configured (requires network)"
+    uv run pip-audit
+
+_ci_liccheck:
+    uv run pip-licenses --allow-only="Apache-2.0;Apache Software License;Apache-2.0 OR BSD-2-Clause;Apache-2.0 OR BSD-3-Clause;BSD License;BSD-2-Clause;BSD-3-Clause;BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0;ISC License (ISCL);ISC;MIT;MIT License;Mozilla Public License 2.0 (MPL 2.0);PSF-2.0;Python Software Foundation License;3-Clause BSD License;Apache Software License; MIT License;GNU Lesser General Public License v3 (LGPLv3)" --ignore-packages google-crc32c
 
 _ci_secaudit:
     uv run ruff check --select S .
@@ -64,3 +67,57 @@ _ci_typecheck:
 
 _ci_testcover:
     uv run pytest --cov=whotalksitron --cov-report=term-missing
+
+_ci_workflows:
+    npx --yes pin-github-action .github/workflows/*.yml
+    zizmor --config .github/zizmor.yml .github/workflows/
+
+# Conventional Commits pattern
+_cc_pattern := '^(feat|fix|perf|refactor|docs|style|test|build|ci|chore)(\(.+\))?(!)?: .+'
+
+# Validate a single commit message file (used by commit-msg hook)
+_ci_commitmsg msgfile:
+    #!/usr/bin/env bash
+    msg=$(head -1 "{{msgfile}}")
+    if ! echo "$msg" | grep -qE '{{_cc_pattern}}'; then
+      echo "ERROR: commit message must follow Conventional Commits"
+      echo "  Format: <type>[optional scope][!]: <description>"
+      echo "  Types: feat, fix, perf, refactor, docs, style, test, build, ci, chore"
+      echo "  Got: $msg"
+      exit 1
+    fi
+
+# Validate all commits in a range (used by pre-push hook)
+_ci_commitrange range:
+    #!/usr/bin/env bash
+    bad=""
+    for sha in $(git rev-list "{{range}}" 2>/dev/null); do
+      msg=$(git log --format=%s -n 1 "$sha")
+      if ! echo "$msg" | grep -qE '{{_cc_pattern}}'; then
+        bad="$bad\n  $sha $msg"
+      fi
+    done
+    if [ -n "$bad" ]; then
+      echo "ERROR: non-conventional commit messages found:$bad"
+      echo ""
+      echo "All commits must match: <type>[scope][!]: <description>"
+      exit 1
+    fi
+
+# Verify all commits in a range are signed (used by pre-push hook)
+_ci_sigcheck range:
+    #!/usr/bin/env bash
+    unsigned=""
+    for sha in $(git rev-list "{{range}}" 2>/dev/null); do
+      sig=$(git log --format='%G?' -n 1 "$sha")
+      if [ "$sig" = "N" ] || [ -z "$sig" ]; then
+        msg=$(git log --format='%h %s' -n 1 "$sha")
+        unsigned="$unsigned\n  $msg"
+      fi
+    done
+    if [ -n "$unsigned" ]; then
+      echo "ERROR: unsigned commits found:$unsigned"
+      echo ""
+      echo "Configure commit signing: git config commit.gpgsign true"
+      exit 1
+    fi

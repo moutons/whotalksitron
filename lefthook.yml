@@ -15,7 +15,16 @@ pre-commit:
     fmtcheck:
       run: just _ci_fmtcheck
 
+commit-msg:
+  commands:
+    conventional-commit:
+      run: just _ci_commitmsg "{1}"
+
 pre-push:
   commands:
+    conventional-commits:
+      run: just _ci_commitrange "origin/main..HEAD"
+    signed-commits:
+      run: just _ci_sigcheck "origin/main..HEAD"
     ensureci-sandbox:
       run: just ensureci-sandbox
