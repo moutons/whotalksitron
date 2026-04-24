@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from whotalksitron.cli import _entrypoint, main
+from whotalksitron.cli import entrypoint, main
 
 
 def test_invocation_logged_to_file(tmp_path):
@@ -688,7 +688,7 @@ def test_friendly_message_retry_exhausted_walks_cause():
 
 
 def _invoke_entrypoint(runner, args, env=None):
-    """Invoke _entrypoint() within CliRunner isolation to capture output."""
+    """Invoke entrypoint() within CliRunner isolation to capture output."""
     old_argv = sys.argv[:]
     # Remove any existing file handlers to avoid cross-test pollution
     for h in logging.root.handlers[:]:
@@ -700,7 +700,7 @@ def _invoke_entrypoint(runner, args, env=None):
         exit_code = 0
         try:
             with runner.isolation(env=env) as (_out_bytes, _err_bytes, mixed_bytes):
-                _entrypoint()
+                entrypoint()
         except SystemExit as e:
             exit_code = e.code if isinstance(e.code, int) else 1
         # mixed_bytes contains both stdout and stderr
@@ -847,3 +847,123 @@ def test_no_traceback_on_any_error(runner, tmp_path, fake_audio):
         assert exit_code == 1, f"Expected exit 1 for {type(exc).__name__}"
         assert "Traceback" not in output, f"Traceback leaked for {type(exc).__name__}"
         assert "Error:" in output, f"No friendly error for {type(exc).__name__}"
+
+
+def test_friendly_message_refresh_error():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.auth.exceptions import RefreshError
+    except ImportError:
+        pytest.skip("google-auth not installed")
+
+    exc = RefreshError("Token has been expired or revoked")
+    msg = _friendly_message(exc)
+    assert "gcloud auth" in msg
+    assert "expired" in msg.lower()
+
+
+def test_friendly_message_gemini_client_error_generic_4xx():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.genai.errors import ClientError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ClientError.__new__(ClientError)
+    exc.code = 403
+    exc.message = "Forbidden"
+    msg = _friendly_message(exc)
+    assert "403" in msg
+    assert "Gemini API error" in msg
+
+
+def test_friendly_message_httpx_timeout():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    request = httpx.Request("POST", "https://api.example.com/v1/transcribe")
+    exc = httpx.ReadTimeout("Read timed out", request=request)
+    msg = _friendly_message(exc)
+    assert "timed out" in msg.lower()
+
+
+def test_friendly_message_httpx_status_error():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    request = httpx.Request("POST", "https://api.example.com/v1/transcribe")
+    response = httpx.Response(502, request=request)
+    exc = httpx.HTTPStatusError("Bad Gateway", request=request, response=response)
+    msg = _friendly_message(exc)
+    assert "502" in msg
+    assert "api.example.com" in msg
+
+
+def test_friendly_message_httpx_connect_error_no_url():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    exc = httpx.ConnectError("Connection refused")
+    msg = _friendly_message(exc)
+    assert "Cannot connect to server" in msg
+
+
+def test_friendly_message_httpx_status_error_no_url():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    request = httpx.Request("GET", "")
+    response = httpx.Response(500, request=request)
+    exc = httpx.HTTPStatusError("error", request=request, response=response)
+    msg = _friendly_message(exc)
+    assert "500" in msg
+    assert "HTTP" in msg
+
+
+def test_keyboard_interrupt_exits_cleanly(runner):
+    """Ctrl+C must exit with code 130, no traceback."""
+    with patch.object(
+        sys.modules["whotalksitron.cli"],
+        "main",
+        side_effect=KeyboardInterrupt,
+    ):
+        exit_code, output = _invoke_entrypoint(runner, ["config", "--show"])
+
+    assert exit_code == 130
+    assert "Traceback" not in output
+
+
+def test_entrypoint_abort(runner):
+    """click.Abort must show 'Aborted.' and exit 1."""
+    import click
+
+    with patch.object(
+        sys.modules["whotalksitron.cli"],
+        "main",
+        side_effect=click.exceptions.Abort,
+    ):
+        exit_code, output = _invoke_entrypoint(runner, ["config", "--show"])
+
+    assert exit_code == 1
+    assert "Aborted" in output
+
+
+def test_entrypoint_usage_error(runner):
+    """click.UsageError must show the error and exit 2."""
+    import click
+
+    with patch.object(
+        sys.modules["whotalksitron.cli"],
+        "main",
+        side_effect=click.exceptions.UsageError("No such option: --bogus"),
+    ):
+        exit_code, output = _invoke_entrypoint(runner, ["--bogus"])
+
+    assert exit_code == 2
+    assert "bogus" in output

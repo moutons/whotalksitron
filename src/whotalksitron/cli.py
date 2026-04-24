@@ -110,9 +110,11 @@ def _friendly_message(exc: Exception) -> str:
 
         if isinstance(exc, httpx.ConnectError):
             url = ""
-            req = getattr(exc, "request", None)
-            if req is not None:
-                url = str(getattr(req, "url", ""))
+            try:
+                req = exc.request
+                url = str(req.url)
+            except Exception:  # noqa: S110
+                pass
             if url:
                 return f"Cannot connect to {url}. Check your network connection."
             return "Cannot connect to server. Check your network connection."
@@ -120,9 +122,11 @@ def _friendly_message(exc: Exception) -> str:
             return "Request timed out. Check your network connection and try again."
         if isinstance(exc, httpx.HTTPStatusError):
             url = ""
-            req = getattr(exc, "request", None)
-            if req is not None:
-                url = str(getattr(req, "url", ""))
+            try:
+                req = exc.request
+                url = str(req.url)
+            except Exception:  # noqa: S110
+                pass
             code = getattr(getattr(exc, "response", None), "status_code", "?")
             if url:
                 return f"HTTP {code} from {url}."
@@ -764,9 +768,11 @@ def _current_log_path() -> str | None:
     return None
 
 
-def _entrypoint() -> None:
+def entrypoint() -> None:
     try:
         main(standalone_mode=False)
+    except KeyboardInterrupt:
+        sys.exit(130)
     except click.exceptions.Exit as e:
         sys.exit(e.exit_code)
     except click.exceptions.Abort:
@@ -788,4 +794,4 @@ def _entrypoint() -> None:
 
 
 if __name__ == "__main__":
-    _entrypoint()
+    entrypoint()
