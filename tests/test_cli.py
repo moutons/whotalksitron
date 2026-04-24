@@ -1,6 +1,7 @@
 import gzip
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -688,27 +689,30 @@ def test_friendly_message_retry_exhausted_walks_cause():
 
 
 def _invoke_entrypoint(runner, args, env=None):
-    """Invoke entrypoint() within CliRunner isolation to capture output."""
+    """Invoke entrypoint() directly, capturing stderr output."""
+    import io
+
     old_argv = sys.argv[:]
-    # Remove any existing file handlers to avoid cross-test pollution
+    old_stderr = sys.stderr
     for h in logging.root.handlers[:]:
         if h.get_name() == "whotalksitron_file":
             logging.root.removeHandler(h)
             h.close()
     try:
         sys.argv = ["whotalksitron", *list(args)]
+        captured = io.StringIO()
+        sys.stderr = captured
         exit_code = 0
         try:
-            with runner.isolation(env=env) as (_out_bytes, _err_bytes, mixed_bytes):
+            with patch.dict(os.environ, env or {}, clear=False):
                 entrypoint()
         except SystemExit as e:
             exit_code = e.code if isinstance(e.code, int) else 1
-        # mixed_bytes contains both stdout and stderr
-        output = mixed_bytes.getvalue().decode("utf-8", errors="replace")
+        output = captured.getvalue()
         return exit_code, output
     finally:
+        sys.stderr = old_stderr
         sys.argv = old_argv
-        # Clean up file handlers added during this invocation too
         for h in logging.root.handlers[:]:
             if h.get_name() == "whotalksitron_file":
                 logging.root.removeHandler(h)
