@@ -567,6 +567,63 @@ def test_friendly_message_runtime_error_pyannote():
     assert "--backend gemini" in msg
 
 
+def test_atexit_removes_file_handler(tmp_path):
+    """atexit handler must remove the file handler from root logger."""
+    import atexit
+
+    from whotalksitron.cli import _setup_file_logging
+
+    log_file = tmp_path / "test.log"
+    registered = []
+    with patch.object(
+        atexit, "register", side_effect=lambda fn: registered.append(fn)
+    ):
+        handler = _setup_file_logging(
+            str(log_file), max_bytes=1_048_576, backup_count=3
+        )
+    assert handler is not None
+    assert len(registered) == 1
+
+    logging.root.addHandler(handler)
+    assert handler in logging.root.handlers
+
+    # Call the registered cleanup function
+    registered[0]()
+
+    assert handler not in logging.root.handlers
+
+
+def test_file_formatter_survives_shutdown_simulation(tmp_path):
+    """FileJsonFormatter must not crash if datetime formatting fails at shutdown."""
+    from whotalksitron.cli import _setup_file_logging
+
+    log_file = tmp_path / "test.log"
+    handler = _setup_file_logging(str(log_file), max_bytes=1_048_576, backup_count=3)
+    assert handler is not None
+
+    test_logger = logging.getLogger("test.shutdown_sim")
+    test_logger.setLevel(logging.DEBUG)
+    test_logger.addHandler(handler)
+
+    try:
+        # Use an out-of-range timestamp to make datetime.fromtimestamp raise
+        # OverflowError or ValueError, simulating shutdown-time import corruption.
+        record = logging.LogRecord(
+            "test.shutdown_sim", logging.ERROR, "", 0, "shutdown test", (), None
+        )
+        record.created = float("inf")  # causes datetime.fromtimestamp to raise
+
+        result = handler.formatter.format(record)
+
+        # Must return a valid JSON fallback, not raise
+        parsed = json.loads(result)
+        assert parsed["level"] == "ERROR"
+        assert parsed["message"] == "shutdown test"
+    finally:
+        test_logger.removeHandler(handler)
+        handler.close()
+
+
 def test_friendly_message_retry_exhausted_walks_cause():
     from whotalksitron.cli import _friendly_message
     from whotalksitron.retry import RetryExhausted

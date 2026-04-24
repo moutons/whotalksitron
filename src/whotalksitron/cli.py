@@ -274,26 +274,51 @@ def _setup_file_logging(
 
     class FileJsonFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
-            data: dict[str, object] = {
-                "ts": datetime.fromtimestamp(record.created, tz=UTC).strftime(
-                    "%Y-%m-%dT%H:%M:%S.%f"
-                )[:-3]
-                + "Z",
-                "level": record.levelname,
-                "logger": record.name,
-                "message": record.getMessage(),
-            }
-            if hasattr(record, "argv"):
-                data["argv"] = record.argv
-            if hasattr(record, "version"):
-                data["version"] = record.version
-            if record.exc_info:
-                import traceback as tb_mod
-                data["traceback"] = "".join(tb_mod.format_exception(*record.exc_info))
-            return json.dumps(data)
+            try:
+                data: dict[str, object] = {
+                    "ts": datetime.fromtimestamp(record.created, tz=UTC).strftime(
+                        "%Y-%m-%dT%H:%M:%S.%f"
+                    )[:-3]
+                    + "Z",
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "message": record.getMessage(),
+                }
+                if hasattr(record, "argv"):
+                    data["argv"] = record.argv
+                if hasattr(record, "version"):
+                    data["version"] = record.version
+                if record.exc_info:
+                    import traceback as tb_mod
+
+                    data["traceback"] = "".join(
+                        tb_mod.format_exception(*record.exc_info)
+                    )
+                return json.dumps(data)
+            except Exception:
+                try:
+                    return json.dumps(
+                        {"level": record.levelname, "message": record.getMessage()}
+                    )
+                except Exception:
+                    return '{"level":"UNKNOWN","message":"log formatting failed"}'
 
     handler.setFormatter(FileJsonFormatter())
     handler.setLevel(logging.DEBUG)
+
+    import atexit
+    import contextlib
+
+    def _cleanup() -> None:
+        with contextlib.suppress(Exception):
+            handler.flush()
+        with contextlib.suppress(Exception):
+            logging.root.removeHandler(handler)
+        with contextlib.suppress(Exception):
+            handler.close()
+
+    atexit.register(_cleanup)
+
     return handler
 
 
