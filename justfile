@@ -28,6 +28,10 @@ ensureci-sandbox: _ci_mdlint _ci_lint _ci_fmtcheck _ci_liccheck _ci_secaudit _ci
 # Quick validation
 isgreen: fmt lint test
 
+# Build distribution packages
+build: clean
+    uv build
+
 # Remove build artifacts
 clean:
     rm -rf dist/ build/ .ruff_cache/ .pytest_cache/ htmlcov/
