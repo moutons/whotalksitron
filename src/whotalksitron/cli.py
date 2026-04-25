@@ -54,7 +54,7 @@ def _friendly_message(exc: Exception) -> str:
     # Walk cause chain for wrapped errors (RetryExhausted, etc.)
     from whotalksitron.retry import RetryExhausted
 
-    if isinstance(exc, RetryExhausted) and exc.__cause__ is not None:
+    if isinstance(exc, RetryExhausted) and isinstance(exc.__cause__, Exception):
         return _friendly_message(exc.__cause__)
 
     # Gemini / Google Cloud errors

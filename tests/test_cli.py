@@ -608,8 +608,10 @@ def test_friendly_message_httpx_connect_error():
     request = httpx.Request("GET", "https://api.example.com/v1")
     exc = httpx.ConnectError("Connection refused", request=request)
     msg = _friendly_message(exc)
-    assert "api.example.com" in msg
-    assert "network" in msg.lower()
+    expected = (
+        "Cannot connect to https://api.example.com/v1. Check your network connection."
+    )
+    assert msg == expected
 
 
 def test_friendly_message_generic_import_error():
@@ -665,6 +667,7 @@ def test_file_formatter_survives_shutdown_simulation(tmp_path):
         )
         record.created = float("inf")  # causes datetime.fromtimestamp to raise
 
+        assert handler.formatter is not None
         result = handler.formatter.format(record)
 
         # Must return a valid JSON fallback, not raise
@@ -903,8 +906,7 @@ def test_friendly_message_httpx_status_error():
     response = httpx.Response(502, request=request)
     exc = httpx.HTTPStatusError("Bad Gateway", request=request, response=response)
     msg = _friendly_message(exc)
-    assert "502" in msg
-    assert "api.example.com" in msg
+    assert msg == "HTTP 502 from https://api.example.com/v1/transcribe."
 
 
 def test_friendly_message_httpx_connect_error_no_url():
