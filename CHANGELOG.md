@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-04-28)
+
+### Bug Fixes
+
+- **ci**: Exclude CHANGELOG.md from markdownlint
+  ([#15](https://github.com/moutons/whotalksitron/pull/15),
+  [`92f7893`](https://github.com/moutons/whotalksitron/commit/92f78934afbe131e702c10169ed37871c2c56ad7))
+
+
 ## v1.1.0 (2026-04-28)
 
 ### Features
