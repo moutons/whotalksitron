@@ -1,12 +1,15 @@
 import gzip
 import json
 import logging
+import os
+import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
-from whotalksitron.cli import main
+from whotalksitron.cli import entrypoint, main
 
 
 def test_invocation_logged_to_file(tmp_path):
@@ -354,6 +357,77 @@ def test_file_handler_disabled_when_empty():
     assert handler is None
 
 
+def test_console_filter_passes_whotalksitron_loggers():
+    """Console handler must pass whotalksitron.* log records."""
+    from whotalksitron.cli import _setup_logging
+
+    _setup_logging("info", "text")
+
+    console = None
+    for h in logging.root.handlers:
+        if h.get_name() == "whotalksitron_console":
+            console = h
+            break
+    assert console is not None
+
+    record = logging.LogRecord(
+        "whotalksitron.backends.gemini", logging.INFO, "", 0, "test msg", (), None
+    )
+    assert console.filter(record)
+
+
+def test_console_filter_blocks_third_party_loggers():
+    """Console handler must block httpx, google_genai, and other third-party loggers."""
+    from whotalksitron.cli import _setup_logging
+
+    _setup_logging("info", "text")
+
+    console = None
+    for h in logging.root.handlers:
+        if h.get_name() == "whotalksitron_console":
+            console = h
+            break
+    assert console is not None
+
+    for name in ("httpx", "google_genai.models", "google.auth", "httpcore"):
+        record = logging.LogRecord(name, logging.INFO, "", 0, "noise", (), None)
+        assert not console.filter(record), f"Should block {name}"
+
+
+def test_console_filter_blocks_third_party_even_at_debug():
+    """Third-party loggers stay blocked even with --log-level debug."""
+    from whotalksitron.cli import _setup_logging
+
+    _setup_logging("debug", "text")
+
+    console = None
+    for h in logging.root.handlers:
+        if h.get_name() == "whotalksitron_console":
+            console = h
+            break
+    assert console is not None
+
+    record = logging.LogRecord("httpx", logging.DEBUG, "", 0, "noise", (), None)
+    assert not console.filter(record)
+
+
+def test_invocation_not_shown_at_info_level(runner, tmp_path):
+    """Invocation record must not appear on console at default info level."""
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {"logging": {"file": ""}}
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    result = runner.invoke(
+        main,
+        ["config", "--show"],
+        env={"WHOTALKSITRON_CONFIG": str(config_file)},
+    )
+    assert result.exit_code == 0
+    assert "invocation" not in result.output
+
+
 def test_setup_logging_preserves_non_console_handlers():
     """_setup_logging must only replace the console handler, not clear all handlers."""
     import logging
@@ -378,3 +452,524 @@ def test_setup_logging_preserves_non_console_handlers():
     finally:
         logging.root.removeHandler(dummy)
         dummy.close()
+
+
+def test_friendly_message_timeout_error():
+    from whotalksitron.cli import _friendly_message
+
+    msg = _friendly_message(TimeoutError("Operation timed out"))
+    assert "timed out" in msg
+    assert "network" in msg.lower()
+
+
+def test_friendly_message_runtime_error():
+    from whotalksitron.cli import _friendly_message
+
+    exc = RuntimeError("Gemini API failed after 3 retries. Check your API key.")
+    msg = _friendly_message(exc)
+    assert msg == "Gemini API failed after 3 retries. Check your API key."
+
+
+def test_friendly_message_import_error_pyannote():
+    from whotalksitron.cli import _friendly_message
+
+    exc = ImportError("No module named 'pyannote'")
+    msg = _friendly_message(exc)
+    assert "uv tool install" in msg
+
+
+def test_friendly_message_import_error_torch():
+    from whotalksitron.cli import _friendly_message
+
+    exc = ImportError("No module named 'torch'")
+    msg = _friendly_message(exc)
+    assert "uv tool install" in msg
+
+
+def test_friendly_message_os_error():
+    from whotalksitron.cli import _friendly_message
+
+    exc = OSError("Permission denied: '/tmp/test.wav'")
+    msg = _friendly_message(exc)
+    assert "Permission denied" in msg
+
+
+def test_friendly_message_unknown_exception():
+    from whotalksitron.cli import _friendly_message
+
+    exc = ValueError("something weird")
+    msg = _friendly_message(exc)
+    assert "something weird" in msg
+
+
+def test_friendly_message_gcs_error():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.api_core.exceptions import NotFound
+    except ImportError:
+        pytest.skip("google-cloud-storage not installed")
+
+    exc = NotFound("404 Bucket my-bucket not found")
+    msg = _friendly_message(exc)
+    assert "my-bucket" in msg
+
+
+def test_friendly_message_gemini_client_error_401():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.genai.errors import ClientError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ClientError.__new__(ClientError)
+    exc.code = 401
+    exc.message = "Unauthorized"
+    msg = _friendly_message(exc)
+    assert "Authentication failed" in msg
+    assert "gcloud auth" in msg
+
+
+def test_friendly_message_gemini_client_error_429():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.genai.errors import ClientError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ClientError.__new__(ClientError)
+    exc.code = 429
+    exc.message = "Rate limited"
+    msg = _friendly_message(exc)
+    assert "Rate limited" in msg
+
+
+def test_friendly_message_gemini_server_error():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.genai.errors import ServerError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ServerError.__new__(ServerError)
+    exc.code = 500
+    exc.message = "Internal Server Error"
+    msg = _friendly_message(exc)
+    assert "server error" in msg.lower()
+    assert "500" in msg
+
+
+def test_friendly_message_runtime_error_pyannote():
+    from whotalksitron.cli import _friendly_message
+
+    exc = RuntimeError("pyannote model failed to load speakers")
+    msg = _friendly_message(exc)
+    assert "Pyannote error" in msg
+    assert "--backend gemini" in msg
+
+
+def test_friendly_message_gemini_client_error_404():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.genai.errors import ClientError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ClientError.__new__(ClientError)
+    exc.code = 404
+    exc.message = "Model not found"
+    msg = _friendly_message(exc)
+    assert "Model not found" in msg
+    assert "gemini.model" in msg
+
+
+def test_friendly_message_default_credentials_error():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.auth.exceptions import DefaultCredentialsError
+    except ImportError:
+        pytest.skip("google-auth not installed")
+
+    exc = DefaultCredentialsError("Could not find default credentials")
+    msg = _friendly_message(exc)
+    assert "gcloud auth" in msg
+
+
+def test_friendly_message_httpx_connect_error():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    request = httpx.Request("GET", "https://api.example.com/v1")
+    exc = httpx.ConnectError("Connection refused", request=request)
+    msg = _friendly_message(exc)
+    expected = (
+        "Cannot connect to https://api.example.com/v1. Check your network connection."
+    )
+    assert msg == expected
+
+
+def test_friendly_message_generic_import_error():
+    from whotalksitron.cli import _friendly_message
+
+    exc = ImportError("No module named 'foobar'")
+    msg = _friendly_message(exc)
+    assert "Missing dependency" in msg
+    assert "foobar" in msg
+
+
+def test_atexit_removes_file_handler(tmp_path):
+    """atexit handler must remove the file handler from root logger."""
+    import atexit
+
+    from whotalksitron.cli import _setup_file_logging
+
+    log_file = tmp_path / "test.log"
+    registered = []
+    with patch.object(atexit, "register", side_effect=lambda fn: registered.append(fn)):
+        handler = _setup_file_logging(
+            str(log_file), max_bytes=1_048_576, backup_count=3
+        )
+    assert handler is not None
+    assert len(registered) == 1
+
+    logging.root.addHandler(handler)
+    assert handler in logging.root.handlers
+
+    # Call the registered cleanup function
+    registered[0]()
+
+    assert handler not in logging.root.handlers
+
+
+def test_file_formatter_survives_shutdown_simulation(tmp_path):
+    """FileJsonFormatter must not crash if datetime formatting fails at shutdown."""
+    from whotalksitron.cli import _setup_file_logging
+
+    log_file = tmp_path / "test.log"
+    handler = _setup_file_logging(str(log_file), max_bytes=1_048_576, backup_count=3)
+    assert handler is not None
+
+    test_logger = logging.getLogger("test.shutdown_sim")
+    test_logger.setLevel(logging.DEBUG)
+    test_logger.addHandler(handler)
+
+    try:
+        # Use an out-of-range timestamp to make datetime.fromtimestamp raise
+        # OverflowError or ValueError, simulating shutdown-time import corruption.
+        record = logging.LogRecord(
+            "test.shutdown_sim", logging.ERROR, "", 0, "shutdown test", (), None
+        )
+        record.created = float("inf")  # causes datetime.fromtimestamp to raise
+
+        assert handler.formatter is not None
+        result = handler.formatter.format(record)
+
+        # Must return a valid JSON fallback, not raise
+        parsed = json.loads(result)
+        assert parsed["level"] == "ERROR"
+        assert parsed["message"] == "shutdown test"
+    finally:
+        test_logger.removeHandler(handler)
+        handler.close()
+
+
+def test_friendly_message_retry_exhausted_walks_cause():
+    from whotalksitron.cli import _friendly_message
+    from whotalksitron.retry import RetryExhausted
+
+    inner = TimeoutError("connection timed out")
+    exc = RetryExhausted("Failed after 3 retries: connection timed out")
+    exc.__cause__ = inner
+    msg = _friendly_message(exc)
+    assert "timed out" in msg
+    assert "network" in msg.lower()
+
+
+def _invoke_entrypoint(runner, args, env=None):
+    """Invoke entrypoint() directly, capturing stderr output."""
+    import io
+
+    old_argv = sys.argv[:]
+    old_stderr = sys.stderr
+    for h in logging.root.handlers[:]:
+        if h.get_name() == "whotalksitron_file":
+            logging.root.removeHandler(h)
+            h.close()
+    try:
+        sys.argv = ["whotalksitron", *list(args)]
+        captured = io.StringIO()
+        sys.stderr = captured
+        exit_code = 0
+        try:
+            with patch.dict(os.environ, env or {}, clear=False):
+                entrypoint()
+        except SystemExit as e:
+            exit_code = e.code if isinstance(e.code, int) else 1
+        output = captured.getvalue()
+        return exit_code, output
+    finally:
+        sys.stderr = old_stderr
+        sys.argv = old_argv
+        for h in logging.root.handlers[:]:
+            if h.get_name() == "whotalksitron_file":
+                logging.root.removeHandler(h)
+                h.close()
+
+
+def test_top_level_handler_catches_timeout(runner, tmp_path, fake_audio):
+    """TimeoutError during transcribe must show friendly message, not traceback."""
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {
+        "defaults": {"backend": "gemini"},
+        "gemini": {"api_key": "test-key"},
+        "logging": {"file": str(tmp_path / "test.log")},
+    }
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    with patch(
+        "whotalksitron.backends.gemini.GeminiBackend.transcribe",
+        side_effect=TimeoutError("Operation timed out"),
+    ):
+        exit_code, output = _invoke_entrypoint(
+            runner,
+            ["transcribe", str(fake_audio)],
+            env={"WHOTALKSITRON_CONFIG": str(config_file)},
+        )
+
+    assert exit_code == 1
+    assert "Traceback" not in output
+    assert "timed out" in output
+
+
+def test_top_level_handler_shows_log_path(runner, tmp_path, fake_audio):
+    """Error message must include path to log file for diagnostics."""
+    config_file = tmp_path / "config.toml"
+    log_file = tmp_path / "test.log"
+    import tomli_w
+
+    data = {
+        "defaults": {"backend": "gemini"},
+        "gemini": {"api_key": "test-key"},
+        "logging": {"file": str(log_file)},
+    }
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    with patch(
+        "whotalksitron.backends.gemini.GeminiBackend.transcribe",
+        side_effect=TimeoutError("Operation timed out"),
+    ):
+        exit_code, output = _invoke_entrypoint(
+            runner,
+            ["transcribe", str(fake_audio)],
+            env={"WHOTALKSITRON_CONFIG": str(config_file)},
+        )
+
+    assert exit_code == 1
+    assert str(log_file) in output
+
+
+def test_top_level_handler_logs_traceback_to_file(runner, tmp_path, fake_audio):
+    """Full traceback must be written to the file log."""
+    config_file = tmp_path / "config.toml"
+    log_file = tmp_path / "test.log"
+    import tomli_w
+
+    data = {
+        "defaults": {"backend": "gemini"},
+        "gemini": {"api_key": "test-key"},
+        "logging": {"file": str(log_file)},
+    }
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    with patch(
+        "whotalksitron.backends.gemini.GeminiBackend.transcribe",
+        side_effect=TimeoutError("Operation timed out"),
+    ):
+        exit_code, _output = _invoke_entrypoint(
+            runner,
+            ["transcribe", str(fake_audio)],
+            env={"WHOTALKSITRON_CONFIG": str(config_file)},
+        )
+
+    assert exit_code == 1
+    log_content = log_file.read_text()
+    assert "TimeoutError" in log_content
+
+
+def test_existing_handled_errors_unchanged(runner, tmp_path):
+    """ValidationError, PreprocessingError, BackendUnavailableError keep behavior."""
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {"logging": {"file": ""}}
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    # Nonexistent audio file triggers ValidationError inside pipeline
+    result = runner.invoke(
+        main,
+        ["transcribe", "/nonexistent/audio.mp3"],
+        env={"WHOTALKSITRON_CONFIG": str(config_file)},
+    )
+    # Click catches the bad path before our code runs (exists=True)
+    assert result.exit_code != 0
+
+
+def test_no_traceback_on_any_error(runner, tmp_path, fake_audio):
+    """No exception type should produce a raw traceback on the console."""
+    config_file = tmp_path / "config.toml"
+    import tomli_w
+
+    data = {
+        "defaults": {"backend": "gemini"},
+        "gemini": {"api_key": "test-key"},
+        "logging": {"file": ""},
+    }
+    config_file.write_bytes(tomli_w.dumps(data).encode())
+
+    errors = [
+        TimeoutError("test"),
+        RuntimeError("test"),
+        OSError("test"),
+        ValueError("test"),
+    ]
+
+    for exc in errors:
+        with patch(
+            "whotalksitron.backends.gemini.GeminiBackend.transcribe",
+            side_effect=exc,
+        ):
+            exit_code, output = _invoke_entrypoint(
+                runner,
+                ["transcribe", str(fake_audio)],
+                env={"WHOTALKSITRON_CONFIG": str(config_file)},
+            )
+        assert exit_code == 1, f"Expected exit 1 for {type(exc).__name__}"
+        assert "Traceback" not in output, f"Traceback leaked for {type(exc).__name__}"
+        assert "Error:" in output, f"No friendly error for {type(exc).__name__}"
+
+
+def test_friendly_message_refresh_error():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.auth.exceptions import RefreshError
+    except ImportError:
+        pytest.skip("google-auth not installed")
+
+    exc = RefreshError("Token has been expired or revoked")
+    msg = _friendly_message(exc)
+    assert "gcloud auth" in msg
+    assert "expired" in msg.lower()
+
+
+def test_friendly_message_gemini_client_error_generic_4xx():
+    from whotalksitron.cli import _friendly_message
+
+    try:
+        from google.genai.errors import ClientError
+    except ImportError:
+        pytest.skip("google-genai not installed")
+
+    exc = ClientError.__new__(ClientError)
+    exc.code = 403
+    exc.message = "Forbidden"
+    msg = _friendly_message(exc)
+    assert "403" in msg
+    assert "Gemini API error" in msg
+
+
+def test_friendly_message_httpx_timeout():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    request = httpx.Request("POST", "https://api.example.com/v1/transcribe")
+    exc = httpx.ReadTimeout("Read timed out", request=request)
+    msg = _friendly_message(exc)
+    assert "timed out" in msg.lower()
+
+
+def test_friendly_message_httpx_status_error():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    request = httpx.Request("POST", "https://api.example.com/v1/transcribe")
+    response = httpx.Response(502, request=request)
+    exc = httpx.HTTPStatusError("Bad Gateway", request=request, response=response)
+    msg = _friendly_message(exc)
+    assert msg == "HTTP 502 from https://api.example.com/v1/transcribe."
+
+
+def test_friendly_message_httpx_connect_error_no_url():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    exc = httpx.ConnectError("Connection refused")
+    msg = _friendly_message(exc)
+    assert "Cannot connect to server" in msg
+
+
+def test_friendly_message_httpx_status_error_no_url():
+    import httpx
+
+    from whotalksitron.cli import _friendly_message
+
+    request = httpx.Request("GET", "")
+    response = httpx.Response(500, request=request)
+    exc = httpx.HTTPStatusError("error", request=request, response=response)
+    msg = _friendly_message(exc)
+    assert "500" in msg
+    assert "HTTP" in msg
+
+
+def test_keyboard_interrupt_exits_cleanly(runner):
+    """Ctrl+C must exit with code 130, no traceback."""
+    with patch.object(
+        sys.modules["whotalksitron.cli"],
+        "main",
+        side_effect=KeyboardInterrupt,
+    ):
+        exit_code, output = _invoke_entrypoint(runner, ["config", "--show"])
+
+    assert exit_code == 130
+    assert "Traceback" not in output
+
+
+def test_entrypoint_abort(runner):
+    """click.Abort must show 'Aborted.' and exit 1."""
+    import click
+
+    with patch.object(
+        sys.modules["whotalksitron.cli"],
+        "main",
+        side_effect=click.exceptions.Abort,
+    ):
+        exit_code, output = _invoke_entrypoint(runner, ["config", "--show"])
+
+    assert exit_code == 1
+    assert "Aborted" in output
+
+
+def test_entrypoint_usage_error(runner):
+    """click.UsageError must show the error and exit 2."""
+    import click
+
+    with patch.object(
+        sys.modules["whotalksitron.cli"],
+        "main",
+        side_effect=click.exceptions.UsageError("No such option: --bogus"),
+    ):
+        exit_code, output = _invoke_entrypoint(runner, ["--bogus"])
+
+    assert exit_code == 2
+    assert "bogus" in output

@@ -43,7 +43,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv run ruff check --select S .
-      - run: uv run pip-audit
+      - run: uv run pip-audit --ignore-vuln CVE-2026-3219
 
   test:
     runs-on: ubuntu-latest

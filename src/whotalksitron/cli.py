@@ -18,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 _CONSOLE_HANDLER_NAME = "whotalksitron_console"
 
+
+class _ConsoleFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.name.startswith("whotalksitron")
+
+
 _SECRET_FLAG_PATTERN = re.compile(
     r"-{1,2}[a-z_-]*(key|token|secret|password)[a-z_-]*", re.IGNORECASE
 )
@@ -44,6 +50,116 @@ def _sanitize_argv(argv: list[str]) -> list[str]:
     return result
 
 
+def _friendly_message(exc: Exception) -> str:
+    # Walk cause chain for wrapped errors (RetryExhausted, etc.)
+    from whotalksitron.retry import RetryExhausted
+
+    if isinstance(exc, RetryExhausted) and isinstance(exc.__cause__, Exception):
+        return _friendly_message(exc.__cause__)
+
+    # Gemini / Google Cloud errors
+    try:
+        from google.genai.errors import ClientError, ServerError
+
+        if isinstance(exc, ClientError):
+            code = getattr(exc, "code", 0) or 0
+            if code == 401:
+                return (
+                    "Authentication failed. Check your API key or run: "
+                    "gcloud auth application-default login"
+                )
+            if code == 404:
+                return f"Model not found. Check gemini.model in your config. ({exc})"
+            if code == 429:
+                return "Rate limited by Gemini API. Wait a moment and try again."
+            return f"Gemini API error ({code}): {exc}"
+        if isinstance(exc, ServerError):
+            code = getattr(exc, "code", 0) or 0
+            return f"Gemini API server error ({code}). Try again later."
+    except ImportError:
+        pass
+
+    try:
+        from google.auth.exceptions import DefaultCredentialsError, RefreshError
+
+        if isinstance(exc, DefaultCredentialsError):
+            return (
+                "No Google Cloud credentials found. Run: "
+                "gcloud auth application-default login"
+            )
+        if isinstance(exc, RefreshError):
+            return (
+                "Google Cloud credentials expired. Run: "
+                "gcloud auth application-default login"
+            )
+    except ImportError:
+        pass
+
+    # GCS errors
+    try:
+        from google.api_core.exceptions import GoogleAPIError
+
+        if isinstance(exc, GoogleAPIError):
+            return f"Google Cloud Storage error: {exc}"
+    except ImportError:
+        pass
+
+    # httpx errors
+    try:
+        import httpx
+
+        if isinstance(exc, httpx.ConnectError):
+            url = ""
+            try:
+                req = exc.request
+                url = str(req.url)
+            except Exception:  # noqa: S110
+                pass
+            if url:
+                return f"Cannot connect to {url}. Check your network connection."
+            return "Cannot connect to server. Check your network connection."
+        if isinstance(exc, httpx.TimeoutException):
+            return "Request timed out. Check your network connection and try again."
+        if isinstance(exc, httpx.HTTPStatusError):
+            url = ""
+            try:
+                req = exc.request
+                url = str(req.url)
+            except Exception:  # noqa: S110
+                pass
+            code = getattr(getattr(exc, "response", None), "status_code", "?")
+            if url:
+                return f"HTTP {code} from {url}."
+            return f"HTTP request failed with status {code}."
+    except ImportError:
+        pass
+
+    if isinstance(exc, TimeoutError):
+        return "Operation timed out. Check your network connection and try again."
+
+    if isinstance(exc, ImportError):
+        msg = str(exc)
+        if "pyannote" in msg or "torch" in msg:
+            return (
+                "Pyannote backend requires extra dependencies. Install: "
+                "uv tool install whotalksitron --with local"
+            )
+        return f"Missing dependency: {exc}"
+
+    if isinstance(exc, RuntimeError):
+        msg = str(exc)
+        if any(kw in msg.lower() for kw in ("cuda", "torch", "pyannote")):
+            return (
+                f"Pyannote error: {msg}. Try --backend gemini or check device settings."
+            )
+        return msg
+
+    if isinstance(exc, OSError):
+        return str(exc)
+
+    return f"Unexpected error: {exc}"
+
+
 def _numeric_level(level: str) -> int:
     return getattr(logging, level.upper(), logging.INFO)
 
@@ -59,6 +175,7 @@ def _setup_logging(level: str, fmt: str) -> None:
     handler = logging.StreamHandler(sys.stderr)
     handler.set_name(_CONSOLE_HANDLER_NAME)
     handler.setLevel(numeric)  # console handler filters by level
+    handler.addFilter(_ConsoleFilter())
     if fmt == "json":
         import json
 
@@ -74,7 +191,23 @@ def _setup_logging(level: str, fmt: str) -> None:
 
         handler.setFormatter(JsonFormatter())
     else:
-        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+
+        class _ConsoleFormatter(logging.Formatter):
+            """Plain text formatter that suppresses tracebacks on console."""
+
+            def format(self, record: logging.LogRecord) -> str:
+                # Temporarily clear exc_info so the traceback is not emitted to console
+                saved_exc_info = record.exc_info
+                saved_exc_text = record.exc_text
+                record.exc_info = None
+                record.exc_text = None
+                try:
+                    return super().format(record)
+                finally:
+                    record.exc_info = saved_exc_info
+                    record.exc_text = saved_exc_text
+
+        handler.setFormatter(_ConsoleFormatter("%(levelname)s %(name)s: %(message)s"))
     logging.root.addHandler(handler)
     logging.root.setLevel(logging.DEBUG)  # root passes everything; handlers filter
 
@@ -145,23 +278,51 @@ def _setup_file_logging(
 
     class FileJsonFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
-            data: dict[str, object] = {
-                "ts": datetime.fromtimestamp(record.created, tz=UTC).strftime(
-                    "%Y-%m-%dT%H:%M:%S.%f"
-                )[:-3]
-                + "Z",
-                "level": record.levelname,
-                "logger": record.name,
-                "message": record.getMessage(),
-            }
-            if hasattr(record, "argv"):
-                data["argv"] = record.argv
-            if hasattr(record, "version"):
-                data["version"] = record.version
-            return json.dumps(data)
+            try:
+                data: dict[str, object] = {
+                    "ts": datetime.fromtimestamp(record.created, tz=UTC).strftime(
+                        "%Y-%m-%dT%H:%M:%S.%f"
+                    )[:-3]
+                    + "Z",
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "message": record.getMessage(),
+                }
+                if hasattr(record, "argv"):
+                    data["argv"] = record.argv
+                if hasattr(record, "version"):
+                    data["version"] = record.version
+                if record.exc_info:
+                    import traceback as tb_mod
+
+                    data["traceback"] = "".join(
+                        tb_mod.format_exception(*record.exc_info)
+                    )
+                return json.dumps(data)
+            except Exception:
+                try:
+                    return json.dumps(
+                        {"level": record.levelname, "message": record.getMessage()}
+                    )
+                except Exception:
+                    return '{"level":"UNKNOWN","message":"log formatting failed"}'
 
     handler.setFormatter(FileJsonFormatter())
     handler.setLevel(logging.DEBUG)
+
+    import atexit
+    import contextlib
+
+    def _cleanup() -> None:
+        with contextlib.suppress(Exception):
+            handler.flush()
+        with contextlib.suppress(Exception):
+            logging.root.removeHandler(handler)
+        with contextlib.suppress(Exception):
+            handler.close()
+
+    atexit.register(_cleanup)
+
     return handler
 
 
@@ -229,7 +390,7 @@ def _init_context(ctx, log_level, log_format, progress, quiet):
     argv = sys.argv[1:] if len(sys.argv) > 1 else []
     record = logger.makeRecord(
         logger.name,
-        logging.INFO,
+        logging.DEBUG,
         "",
         0,
         "invocation",
@@ -598,5 +759,39 @@ def _coerce_value(value: str) -> object:
     return value
 
 
+def _current_log_path() -> str | None:
+    for h in logging.root.handlers:
+        if h.get_name() == _FILE_HANDLER_NAME:
+            path = getattr(h, "baseFilename", None)
+            if path:
+                return path
+    return None
+
+
+def entrypoint() -> None:
+    try:
+        main(standalone_mode=False)
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except click.exceptions.Exit as e:
+        sys.exit(e.exit_code)
+    except click.exceptions.Abort:
+        click.echo("Aborted.", err=True)
+        sys.exit(1)
+    except click.exceptions.UsageError as e:
+        e.show()
+        sys.exit(e.exit_code)
+    except Exception as e:
+        logger.exception("Unhandled exception")
+        msg = _friendly_message(e)
+        click.echo(f"Error: {msg}", err=True)
+        log_path = _current_log_path()
+        if log_path:
+            click.echo(f"Details: {log_path}", err=True)
+        else:
+            click.echo("Use --log-level debug for details.", err=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    main()
+    entrypoint()

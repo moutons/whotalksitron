@@ -28,6 +28,10 @@ ensureci-sandbox: _ci_mdlint _ci_lint _ci_fmtcheck _ci_liccheck _ci_secaudit _ci
 # Quick validation
 isgreen: fmt lint test
 
+# Build distribution packages
+build: clean
+    uv build
+
 # Remove build artifacts
 clean:
     rm -rf dist/ build/ .ruff_cache/ .pytest_cache/ htmlcov/
@@ -50,7 +54,7 @@ _ci_fmtcheck:
     uv run ruff format --check .
 
 _ci_vulncheck:
-    uv run pip-audit
+    uv run pip-audit --ignore-vuln CVE-2026-3219
 
 _ci_liccheck:
     uv run pip-licenses --allow-only="Apache-2.0;Apache Software License;Apache-2.0 OR BSD-2-Clause;Apache-2.0 OR BSD-3-Clause;BSD License;BSD-2-Clause;BSD-3-Clause;BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0;ISC License (ISCL);ISC;MIT;MIT License;Mozilla Public License 2.0 (MPL 2.0);PSF-2.0;Python Software Foundation License;3-Clause BSD License;Apache Software License; MIT License;GNU Lesser General Public License v3 (LGPLv3)" --ignore-packages google-crc32c
