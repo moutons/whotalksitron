@@ -1,5 +1,6 @@
 ignores:
   - "docs/superpowers/plans/**"
+  - "CHANGELOG.md"
 
 config:
   # Disable line length limit
