@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import httpx  # noqa: F401
+import httpx
 
 from whotalksitron.config import Config
 from whotalksitron.models import SpeakerPool, TranscriptResult
@@ -45,4 +45,75 @@ class MistralBackend:
         speakers: SpeakerPool | None = None,
         progress: ProgressCallback | None = None,
     ) -> TranscriptResult:
-        raise NotImplementedError  # filled in by later tasks
+        from whotalksitron.models import TranscriptResult, TranscriptSegment
+
+        audio_path = Path(audio_path)
+        if audio_path.stat().st_size == 0:
+            raise ValueError(f"Audio file is empty: {audio_path}")
+
+        if speakers and speakers.speakers and not self._diarization_notice_logged:
+            logger.info(
+                "Mistral backend ignores speaker enrollment in this version. "
+                "Use the gemini or pyannote backend for diarization."
+            )
+            self._diarization_notice_logged = True
+
+        if progress:
+            progress.update("transcribe", 0, "sending to Mistral API")
+
+        endpoint = self._config.mistral_endpoint.rstrip("/")
+        url = f"{endpoint}/audio/transcriptions"
+        mime = _guess_mime(audio_path)
+        audio_bytes = audio_path.read_bytes()
+
+        response = httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {self._config.mistral_api_key}"},
+            files={"file": (audio_path.name, audio_bytes, mime)},
+            data={
+                "model": self._config.mistral_model,
+                "timestamp_granularities": "segment",
+            },
+            timeout=600.0,
+        )
+        response.raise_for_status()
+
+        if progress:
+            progress.update("transcribe", 80, "parsing response")
+
+        data = response.json()
+        segments = [
+            TranscriptSegment(
+                start=float(seg.get("start", 0.0)),
+                end=float(seg.get("end", seg.get("start", 0.0))),
+                text=(seg.get("text") or "").strip(),
+                speaker=None,
+            )
+            for seg in data.get("segments") or []
+        ]
+
+        usage = data.get("usage") or {}
+        result = TranscriptResult(
+            segments=segments,
+            metadata={
+                "backend": "mistral",
+                "model": data.get("model") or self._config.mistral_model,
+                "token_count": usage.get("total_tokens"),
+                "prompt_audio_seconds": usage.get("prompt_audio_seconds"),
+            },
+        )
+
+        if progress:
+            progress.stage_complete("transcribe", f"{len(segments)} segments")
+        return result
+
+
+def _guess_mime(path: Path) -> str:
+    return {
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".flac": "audio/flac",
+        ".ogg": "audio/ogg",
+        ".m4a": "audio/mp4",
+        ".webm": "audio/webm",
+    }.get(path.suffix.lower(), "audio/mpeg")
