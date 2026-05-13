@@ -276,3 +276,14 @@ def test_config_from_dict_reads_mistral_table():
     assert cfg.mistral_keychain_account == "alt-account"
     assert cfg.mistral_keychain_service == "alt-service"
     assert cfg.mistral_op_reference == "op://Private/mistral/key"
+
+
+def test_config_write_default_round_trips_mistral(tmp_path):
+    cfg = Config()
+    path = tmp_path / "config.toml"
+    cfg.write_default(path)
+    reloaded = Config.from_file(path)
+    assert reloaded.mistral_model == "voxtral-mini-latest"
+    assert reloaded.mistral_keychain_account == "mistral"
+    assert reloaded.mistral_keychain_service == "mistral-apikey"
+    assert reloaded.mistral_endpoint == "https://api.mistral.ai/v1"

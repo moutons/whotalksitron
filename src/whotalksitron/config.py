@@ -220,6 +220,14 @@ class Config:
                 "keychain_service": self.gemini_keychain_service,
                 "op_reference": "",
             },
+            "mistral": {
+                "api_key": "",
+                "endpoint": self.mistral_endpoint,
+                "model": self.mistral_model,
+                "keychain_account": self.mistral_keychain_account,
+                "keychain_service": self.mistral_keychain_service,
+                "op_reference": "",
+            },
             "pyannote": {
                 "whisper_model": self.pyannote_whisper_model,
                 "diarization_model": self.pyannote_diarization_model,
