@@ -260,3 +260,24 @@ def test_transcribe_500_retries_then_recovers(tmp_path):
     ), patch("whotalksitron.retry.time.sleep"):
         result = backend.transcribe(audio)
     assert len(result.segments) == 2
+
+
+def test_transcribe_diarization_notice_logged_once_per_instance(tmp_path, caplog):
+    from whotalksitron.backends.mistral import MistralBackend
+    from whotalksitron.models import SpeakerPool
+
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"x")
+    backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
+    pool = SpeakerPool(podcast="atp", speakers={"Alice": [tmp_path / "alice.wav"]})
+
+    with patch(
+        "whotalksitron.backends.mistral.httpx.post",
+        return_value=_mock_response(200, _HAPPY_RESPONSE),
+    ), caplog.at_level("INFO", logger="whotalksitron.backends.mistral"):
+        backend.transcribe(audio, speakers=pool)
+        backend.transcribe(audio, speakers=pool)
+
+    notices = [r for r in caplog.records
+               if "ignores speaker enrollment" in r.message]
+    assert len(notices) == 1
