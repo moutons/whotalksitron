@@ -309,6 +309,31 @@ def test_resolve_secret_signature_is_keyword_only():
     assert all(p.kind == inspect.Parameter.KEYWORD_ONLY for p in params)
 
 
+def test_mistral_endpoint_rejects_http(tmp_path):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('[mistral]\nendpoint = "http://insecure.example.com/v1"\n')
+    with pytest.raises(ValueError, match="https://"):
+        load_config(config_path, {})
+
+
+def test_mistral_endpoint_strips_trailing_slash(tmp_path):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('[mistral]\nendpoint = "https://api.mistral.ai/v1/"\n')
+    cfg = load_config(config_path, {})
+    assert cfg.mistral_endpoint == "https://api.mistral.ai/v1"
+
+
+def test_mistral_endpoint_non_default_warns(tmp_path, caplog):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('[mistral]\nendpoint = "https://proxy.example.com/v1"\n')
+    with caplog.at_level("WARNING", logger="whotalksitron.config"):
+        load_config(config_path, {})
+    assert any(
+        "non-default" in r.message.lower() or "bearer token" in r.message.lower()
+        for r in caplog.records
+    ), [r.message for r in caplog.records]
+
+
 def test_load_config_calls_resolve_secret_for_both_backends_when_empty(monkeypatch, tmp_path):  # noqa: E501
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_CLOUD_API_KEY", raising=False)

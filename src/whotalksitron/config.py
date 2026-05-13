@@ -323,6 +323,19 @@ def load_config(
         if val is not None and hasattr(cfg, key):
             setattr(cfg, key, val)
 
+    cfg.mistral_endpoint = cfg.mistral_endpoint.rstrip("/")
+    if not cfg.mistral_endpoint.startswith("https://"):
+        raise ValueError(
+            f"mistral.endpoint must use https:// scheme; "
+            f"got {cfg.mistral_endpoint!r}"
+        )
+    if cfg.mistral_endpoint != "https://api.mistral.ai/v1":
+        logger.warning(
+            "mistral.endpoint is non-default (%s); bearer token will be "
+            "sent to this host",
+            cfg.mistral_endpoint,
+        )
+
     return cfg
 
 
