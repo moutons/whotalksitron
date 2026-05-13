@@ -247,3 +247,13 @@ def test_config_1password_retrieval(monkeypatch, tmp_path):
         cfg = load_config(config_path=config_file, cli_overrides={})
 
     assert cfg.gemini_api_key == "op-api-key-456"
+
+
+def test_config_has_mistral_defaults():
+    cfg = Config()
+    assert cfg.mistral_api_key == ""
+    assert cfg.mistral_endpoint == "https://api.mistral.ai/v1"
+    assert cfg.mistral_model == "voxtral-mini-latest"
+    assert cfg.mistral_keychain_account == "mistral"
+    assert cfg.mistral_keychain_service == "mistral-apikey"
+    assert cfg.mistral_op_reference == ""

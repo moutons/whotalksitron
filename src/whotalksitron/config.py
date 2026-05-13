@@ -28,6 +28,13 @@ class Config:
     gemini_keychain_service: str = "vertex-apikey"
     gemini_op_reference: str = ""
 
+    mistral_api_key: str = ""
+    mistral_endpoint: str = "https://api.mistral.ai/v1"
+    mistral_model: str = "voxtral-mini-latest"
+    mistral_keychain_account: str = "mistral"
+    mistral_keychain_service: str = "mistral-apikey"
+    mistral_op_reference: str = ""
+
     pyannote_whisper_model: str = "large-v3"
     pyannote_diarization_model: str = "pyannote/speaker-diarization-3.1"
     pyannote_device: str = "auto"
