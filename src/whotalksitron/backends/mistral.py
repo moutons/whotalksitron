@@ -134,11 +134,11 @@ class MistralBackend:
                 "and network connectivity, or try a different backend."
             ) from exc
         except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
             raise RuntimeError(
                 f"Mistral API rejected the request "
-                f"(HTTP {exc.response.status_code}). Check your API key and "
-                f"request parameters."
-            ) from exc
+                f"(HTTP {status}). Check your API key and request parameters."
+            ) from None
 
         if progress:
             progress.update("transcribe", 80, "parsing response")
