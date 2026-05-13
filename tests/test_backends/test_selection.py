@@ -64,3 +64,40 @@ def test_select_backend_auto_no_backends(monkeypatch):
 
     with pytest.raises(BackendUnavailableError, match="No backend available"):
         select_backend(cfg)
+
+
+def test_select_backend_explicit_mistral():
+    from whotalksitron.backends import select_backend
+    from whotalksitron.backends.mistral import MistralBackend
+    from whotalksitron.config import Config
+
+    cfg = Config()
+    cfg.backend = "mistral"
+    cfg.mistral_api_key = "sk-test"
+    backend = select_backend(cfg)
+    assert isinstance(backend, MistralBackend)
+
+
+def test_select_backend_mistral_unavailable_when_no_key():
+    from whotalksitron.backends import BackendUnavailableError, select_backend
+    from whotalksitron.config import Config
+
+    cfg = Config()
+    cfg.backend = "mistral"
+    with pytest.raises(BackendUnavailableError, match="MISTRAL_API_KEY"):
+        select_backend(cfg)
+
+
+def test_auto_select_does_not_pick_mistral(monkeypatch):
+    """Even when Mistral is the only configured backend, auto must skip it."""
+    from whotalksitron.backends import BackendUnavailableError, select_backend
+    from whotalksitron.config import Config
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_API_KEY", raising=False)
+    cfg = Config()
+    cfg.backend = "auto"
+    cfg.mistral_api_key = "sk-test"
+    # Mistral is opt-in only; auto-select must NOT pick it.
+    with pytest.raises(BackendUnavailableError):
+        select_backend(cfg)

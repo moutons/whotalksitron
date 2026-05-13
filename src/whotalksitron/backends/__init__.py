@@ -77,6 +77,10 @@ def _create_backend(name: str, config: Config) -> Backend:
         from whotalksitron.backends.whisper import WhisperBackend
 
         return WhisperBackend(config)
+    elif name == "mistral":
+        from whotalksitron.backends.mistral import MistralBackend
+
+        return MistralBackend(config)
     else:
         raise BackendUnavailableError(f"Unknown backend: {name!r}")
 
@@ -87,6 +91,8 @@ def _unavailable_message(name: str, backend: Backend) -> str:
         "pyannote": "Install local extras: `uv tool install whotalksitron "
         "--with local`",
         "whisper": "Start Ollama or LM Studio. No response from endpoint.",
+        "mistral": "Set MISTRAL_API_KEY, store the key in macOS Keychain "
+        "(mistral/mistral-apikey), or set mistral.op_reference in config.",
     }
     hint = hints.get(name, "Check configuration.")
     return f"Backend {name!r} is not available. {hint}"
