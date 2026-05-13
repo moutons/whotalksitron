@@ -20,18 +20,21 @@ def _make_config(**overrides) -> Config:
 
 def test_backend_is_available_when_key_set():
     from whotalksitron.backends.mistral import MistralBackend
+
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
     assert backend.is_available() is True
 
 
 def test_backend_is_available_false_when_key_missing():
     from whotalksitron.backends.mistral import MistralBackend
+
     backend = MistralBackend(_make_config())
     assert backend.is_available() is False
 
 
 def test_backend_name_and_diarization():
     from whotalksitron.backends.mistral import MistralBackend
+
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
     assert backend.name == "mistral"
     assert backend.supports_diarization() is False
@@ -54,8 +57,12 @@ _HAPPY_RESPONSE = {
 }
 
 
-def _mock_response(status_code: int = 200, body: dict | None = None,
-                   text: str = "", headers: dict | None = None) -> MagicMock:
+def _mock_response(
+    status_code: int = 200,
+    body: dict | None = None,
+    text: str = "",
+    headers: dict | None = None,
+) -> MagicMock:
     resp = MagicMock(spec=httpx.Response)
     resp.status_code = status_code
     resp.headers = headers or {}
@@ -72,6 +79,7 @@ def _mock_response(status_code: int = 200, body: dict | None = None,
 
 def test_transcribe_zero_byte_audio_raises(tmp_path):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "empty.mp3"
     audio.write_bytes(b"")
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
@@ -81,6 +89,7 @@ def test_transcribe_zero_byte_audio_raises(tmp_path):
 
 def test_transcribe_happy_path_request_shape(tmp_path):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"fake-audio-bytes")
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
@@ -115,12 +124,15 @@ def test_transcribe_happy_path_request_shape(tmp_path):
 
 def test_transcribe_strips_trailing_slash_in_url(tmp_path):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"x")
-    backend = MistralBackend(_make_config(
-        mistral_api_key="sk-test",
-        mistral_endpoint="https://api.mistral.ai/v1",
-    ))
+    backend = MistralBackend(
+        _make_config(
+            mistral_api_key="sk-test",
+            mistral_endpoint="https://api.mistral.ai/v1",
+        )
+    )
     with patch(
         "whotalksitron.backends.mistral.httpx.post",
         return_value=_mock_response(200, _HAPPY_RESPONSE),
@@ -132,14 +144,18 @@ def test_transcribe_strips_trailing_slash_in_url(tmp_path):
 
 def test_transcribe_empty_segments_fallback(tmp_path, caplog):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"x")
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
     body = {"model": "voxtral-mini-2507", "text": "Single chunk.", "segments": []}
-    with patch(
-        "whotalksitron.backends.mistral.httpx.post",
-        return_value=_mock_response(200, body),
-    ), caplog.at_level("INFO", logger="whotalksitron.backends.mistral"):
+    with (
+        patch(
+            "whotalksitron.backends.mistral.httpx.post",
+            return_value=_mock_response(200, body),
+        ),
+        caplog.at_level("INFO", logger="whotalksitron.backends.mistral"),
+    ):
         result = backend.transcribe(audio)
     assert len(result.segments) == 1
     assert result.segments[0].text == "Single chunk."
@@ -150,6 +166,7 @@ def test_transcribe_empty_segments_fallback(tmp_path, caplog):
 
 def test_transcribe_missing_start_end_defaults_to_zero(tmp_path):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"x")
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
@@ -166,22 +183,29 @@ def test_transcribe_missing_start_end_defaults_to_zero(tmp_path):
 
 def test_transcribe_inverted_segment_warns_but_keeps(tmp_path, caplog):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"x")
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
     body = {"segments": [{"start": 5.0, "end": 2.0, "text": "bad"}]}
-    with patch(
-        "whotalksitron.backends.mistral.httpx.post",
-        return_value=_mock_response(200, body),
-    ), caplog.at_level("WARNING", logger="whotalksitron.backends.mistral"):
+    with (
+        patch(
+            "whotalksitron.backends.mistral.httpx.post",
+            return_value=_mock_response(200, body),
+        ),
+        caplog.at_level("WARNING", logger="whotalksitron.backends.mistral"),
+    ):
         result = backend.transcribe(audio)
     assert len(result.segments) == 1
-    assert any("start" in r.message.lower() and "end" in r.message.lower()
-               for r in caplog.records)
+    assert any(
+        "start" in r.message.lower() and "end" in r.message.lower()
+        for r in caplog.records
+    )
 
 
 def test_transcribe_non_json_response_raises_runtime_error(tmp_path):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"x")
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
@@ -196,6 +220,7 @@ def test_transcribe_non_json_response_raises_runtime_error(tmp_path):
 
 def test_transcribe_413_friendly_error_no_retry(tmp_path):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"x")
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
@@ -212,6 +237,7 @@ def test_transcribe_413_friendly_error_no_retry(tmp_path):
 
 def test_transcribe_401_no_retry(tmp_path):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"x")
     backend = MistralBackend(_make_config(mistral_api_key="sk-bad"))
@@ -228,6 +254,7 @@ def test_transcribe_401_no_retry(tmp_path):
 
 def test_transcribe_429_retries_then_fails(tmp_path):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"x")
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
@@ -247,6 +274,7 @@ def test_transcribe_429_retries_then_fails(tmp_path):
 
 def test_transcribe_500_retries_then_recovers(tmp_path):
     from whotalksitron.backends.mistral import MistralBackend
+
     audio = tmp_path / "clip.mp3"
     audio.write_bytes(b"x")
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
@@ -254,10 +282,13 @@ def test_transcribe_500_retries_then_recovers(tmp_path):
         _mock_response(500, body={"error": "boom"}),
         _mock_response(200, _HAPPY_RESPONSE),
     ]
-    with patch(
-        "whotalksitron.backends.mistral.httpx.post",
-        side_effect=responses,
-    ), patch("whotalksitron.retry.time.sleep"):
+    with (
+        patch(
+            "whotalksitron.backends.mistral.httpx.post",
+            side_effect=responses,
+        ),
+        patch("whotalksitron.retry.time.sleep"),
+    ):
         result = backend.transcribe(audio)
     assert len(result.segments) == 2
 
@@ -271,13 +302,15 @@ def test_transcribe_diarization_notice_logged_once_per_instance(tmp_path, caplog
     backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
     pool = SpeakerPool(podcast="atp", speakers={"Alice": [tmp_path / "alice.wav"]})
 
-    with patch(
-        "whotalksitron.backends.mistral.httpx.post",
-        return_value=_mock_response(200, _HAPPY_RESPONSE),
-    ), caplog.at_level("INFO", logger="whotalksitron.backends.mistral"):
+    with (
+        patch(
+            "whotalksitron.backends.mistral.httpx.post",
+            return_value=_mock_response(200, _HAPPY_RESPONSE),
+        ),
+        caplog.at_level("INFO", logger="whotalksitron.backends.mistral"),
+    ):
         backend.transcribe(audio, speakers=pool)
         backend.transcribe(audio, speakers=pool)
 
-    notices = [r for r in caplog.records
-               if "ignores speaker enrollment" in r.message]
+    notices = [r for r in caplog.records if "ignores speaker enrollment" in r.message]
     assert len(notices) == 1

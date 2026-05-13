@@ -326,8 +326,7 @@ def load_config(
     cfg.mistral_endpoint = cfg.mistral_endpoint.rstrip("/")
     if not cfg.mistral_endpoint.startswith("https://"):
         raise ValueError(
-            f"mistral.endpoint must use https:// scheme; "
-            f"got {cfg.mistral_endpoint!r}"
+            f"mistral.endpoint must use https:// scheme; got {cfg.mistral_endpoint!r}"
         )
     if cfg.mistral_endpoint != "https://api.mistral.ai/v1":
         logger.warning(
@@ -391,9 +390,7 @@ def _resolve_secret(
                 timeout=10,
             )
             if result.returncode == 0 and result.stdout.strip():
-                logger.debug(
-                    "API key loaded from 1Password (%s)", keychain_service
-                )
+                logger.debug("API key loaded from 1Password (%s)", keychain_service)
                 return result.stdout.strip()
             logger.debug(
                 "1Password lookup returned %d (%s)",

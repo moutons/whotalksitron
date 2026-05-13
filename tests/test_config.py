@@ -302,6 +302,7 @@ def test_config_show_masks_mistral_key():
 
 def test_resolve_secret_signature_is_keyword_only():
     from whotalksitron.config import _resolve_secret
+
     sig = inspect.signature(_resolve_secret)
     params = list(sig.parameters.values())
     names = {p.name for p in params}
@@ -334,7 +335,9 @@ def test_mistral_endpoint_non_default_warns(tmp_path, caplog):
     ), [r.message for r in caplog.records]
 
 
-def test_load_config_calls_resolve_secret_for_both_backends_when_empty(monkeypatch, tmp_path):  # noqa: E501
+def test_load_config_calls_resolve_secret_for_both_backends_when_empty(
+    monkeypatch, tmp_path
+):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_CLOUD_API_KEY", raising=False)
     monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
