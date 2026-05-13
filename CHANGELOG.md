@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## [Unreleased]
+
+### Added
+
+- New `mistral` backend (Voxtral Mini) for cloud transcription via
+  Mistral's `/v1/audio/transcriptions` endpoint. Opt-in via
+  `--backend mistral`. Supports `MISTRAL_API_KEY` env var, macOS Keychain
+  (`mistral/mistral-apikey`), and 1Password (`op` CLI) for secret
+  resolution.
+
+
 ## v1.1.1 (2026-04-28)
 
 ### Bug Fixes

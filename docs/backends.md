@@ -60,6 +60,37 @@ model = "whisper-large-v3"
 whotalksitron transcribe episode.mp3 --backend whisper
 ```
 
+## Mistral (Voxtral Mini)
+
+Cloud transcription via Mistral's `/v1/audio/transcriptions` endpoint.
+
+**Auth:** Set `MISTRAL_API_KEY` in the environment, store the key in
+macOS Keychain under service `mistral-apikey` account `mistral`, or set
+`mistral.op_reference` to a 1Password `op://...` reference in config.
+
+**Diarization:** Not supported in this version. Use `gemini` or `pyannote` for diarization.
+
+**Limits:** Up to 3 hours of audio per request (Mistral-documented).
+
+**Config:**
+
+```toml
+[defaults]
+backend = "mistral"
+
+[mistral]
+model = "voxtral-mini-latest"
+# api_key = ""           # leave blank to use env / keychain / 1password
+# op_reference = "op://Private/mistral/api_key"
+```
+
+```sh
+whotalksitron transcribe episode.mp3 --backend mistral
+```
+
+Mistral is **not** in the auto-select fallback chain — you must pick it
+explicitly with `--backend mistral` or `defaults.backend = "mistral"`.
+
 ## Auto-selection order
 
 1. `gemini` — if `gemini.api_key` or `gemini.use_adc` is set

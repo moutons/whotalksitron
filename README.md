@@ -138,6 +138,7 @@ Configuration is resolved in this order (later overrides earlier):
 | `GOOGLE_GENAI_USE_VERTEXAI` | `gemini.use_adc` | Set to `1` to use Vertex AI instead of AI Studio |
 | `GOOGLE_CLOUD_STORAGE_BUCKET` | `gemini.gcs_bucket` | GCS bucket for staging large audio files (Vertex AI only) |
 | `GEMINI_API_KEY` | `gemini.api_key` | Alternative to `GOOGLE_CLOUD_API_KEY` |
+| `MISTRAL_API_KEY` | `mistral.api_key` | Mistral API key |
 | `WHOTALKSITRON_BACKEND` | `defaults.backend` | Default backend |
 | `WHOTALKSITRON_LOG_LEVEL` | `defaults.log_level` | Default log level |
 | `WHOTALKSITRON_CONFIG` | — | Override config file path |
@@ -172,6 +173,11 @@ device = "auto"         # auto, cpu, cuda, mps
 endpoint = "http://localhost:1234/v1"
 model = "whisper-large-v3"
 
+[mistral]
+model = "voxtral-mini-latest"
+# api_key = ""           # leave blank to use env / keychain / 1password
+# op_reference = "op://Private/mistral/api_key"
+
 [speakers]
 match_threshold = 0.7   # cosine similarity threshold for voiceprint matching
 
@@ -191,8 +197,11 @@ file_backup_count = 5         # range: 1-10
 | `gemini` | Gemini or Vertex AI credentials | Yes | Best quality, handles any format |
 | `pyannote` | `--with local`, torch, GPU recommended | Yes | Fully local, slower |
 | `whisper` | Ollama or LM Studio running locally | No | Transcription only |
+| `mistral` | `MISTRAL_API_KEY`, macOS Keychain (`mistral/mistral-apikey`), or `mistral.op_reference` | No | Cloud; up to 3-hour audio per request; opt-in only |
 
-Backend is selected automatically in the order above based on what credentials are available. Override with `--backend`.
+Backend is selected automatically in the order above based on what credentials are available. Override with `--backend`. The `mistral` backend is **not** included in auto-selection — you must choose it explicitly.
+
+**Secret storage:** The `op` CLI (1Password) and `security` (macOS Keychain) commands are runtime dependencies users install separately. Keychain resolution is macOS-only; on other platforms, set `MISTRAL_API_KEY` (or `GEMINI_API_KEY`) directly or use `mistral.op_reference` / `gemini.op_reference` with the `op` CLI.
 
 ## Speakers directory
 
