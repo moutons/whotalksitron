@@ -128,3 +128,67 @@ def test_transcribe_strips_trailing_slash_in_url(tmp_path):
         backend.transcribe(audio)
     assert post.call_args[0][0] == "https://api.mistral.ai/v1/audio/transcriptions"
     assert "//audio" not in post.call_args[0][0]
+
+
+def test_transcribe_empty_segments_fallback(tmp_path, caplog):
+    from whotalksitron.backends.mistral import MistralBackend
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"x")
+    backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
+    body = {"model": "voxtral-mini-2507", "text": "Single chunk.", "segments": []}
+    with patch(
+        "whotalksitron.backends.mistral.httpx.post",
+        return_value=_mock_response(200, body),
+    ), caplog.at_level("INFO", logger="whotalksitron.backends.mistral"):
+        result = backend.transcribe(audio)
+    assert len(result.segments) == 1
+    assert result.segments[0].text == "Single chunk."
+    assert result.segments[0].start == 0.0
+    assert result.segments[0].end == 0.0
+    assert any("no segment timestamps" in r.message.lower() for r in caplog.records)
+
+
+def test_transcribe_missing_start_end_defaults_to_zero(tmp_path):
+    from whotalksitron.backends.mistral import MistralBackend
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"x")
+    backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
+    body = {"text": "x", "segments": [{"text": "no times"}]}
+    with patch(
+        "whotalksitron.backends.mistral.httpx.post",
+        return_value=_mock_response(200, body),
+    ):
+        result = backend.transcribe(audio)
+    assert result.segments[0].start == 0.0
+    assert result.segments[0].end == 0.0
+    assert result.segments[0].text == "no times"
+
+
+def test_transcribe_inverted_segment_warns_but_keeps(tmp_path, caplog):
+    from whotalksitron.backends.mistral import MistralBackend
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"x")
+    backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
+    body = {"segments": [{"start": 5.0, "end": 2.0, "text": "bad"}]}
+    with patch(
+        "whotalksitron.backends.mistral.httpx.post",
+        return_value=_mock_response(200, body),
+    ), caplog.at_level("WARNING", logger="whotalksitron.backends.mistral"):
+        result = backend.transcribe(audio)
+    assert len(result.segments) == 1
+    assert any("start" in r.message.lower() and "end" in r.message.lower()
+               for r in caplog.records)
+
+
+def test_transcribe_non_json_response_raises_runtime_error(tmp_path):
+    from whotalksitron.backends.mistral import MistralBackend
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"x")
+    backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
+    resp = _mock_response(200, body=None, text="<html>502 Bad Gateway</html>")
+    resp.json.side_effect = json.JSONDecodeError("bad", "doc", 0)
+    with (
+        patch("whotalksitron.backends.mistral.httpx.post", return_value=resp),
+        pytest.raises(RuntimeError, match="parse"),
+    ):
+        backend.transcribe(audio)

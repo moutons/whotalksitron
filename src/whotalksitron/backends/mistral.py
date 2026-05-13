@@ -10,13 +10,14 @@ Authorization bearer header cannot leak via debug-level logging.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
 import httpx
 
 from whotalksitron.config import Config
-from whotalksitron.models import SpeakerPool, TranscriptResult
+from whotalksitron.models import SpeakerPool, TranscriptResult, TranscriptSegment
 from whotalksitron.progress import ProgressCallback
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,6 @@ class MistralBackend:
         speakers: SpeakerPool | None = None,
         progress: ProgressCallback | None = None,
     ) -> TranscriptResult:
-        from whotalksitron.models import TranscriptResult, TranscriptSegment
-
         audio_path = Path(audio_path)
         if audio_path.stat().st_size == 0:
             raise ValueError(f"Audio file is empty: {audio_path}")
@@ -81,16 +80,46 @@ class MistralBackend:
         if progress:
             progress.update("transcribe", 80, "parsing response")
 
-        data = response.json()
-        segments = [
-            TranscriptSegment(
-                start=float(seg.get("start", 0.0)),
-                end=float(seg.get("end", seg.get("start", 0.0))),
-                text=(seg.get("text") or "").strip(),
-                speaker=None,
+        try:
+            data = response.json()
+        except json.JSONDecodeError as exc:
+            preview = response.text[:200]
+            raise RuntimeError(
+                f"Could not parse Mistral response as JSON: {preview!r}"
+            ) from exc
+
+        raw_segments = data.get("segments") or []
+        segments: list[TranscriptSegment] = []
+        for seg in raw_segments:
+            start = float(seg.get("start", 0.0))
+            end = float(seg.get("end", start))
+            if start > end:
+                logger.warning(
+                    "Mistral segment has start>end (start=%s, end=%s); keeping as-is",
+                    start,
+                    end,
+                )
+            segments.append(
+                TranscriptSegment(
+                    start=start,
+                    end=end,
+                    text=(seg.get("text") or "").strip(),
+                    speaker=None,
+                )
             )
-            for seg in data.get("segments") or []
-        ]
+
+        if not segments:
+            text = (data.get("text") or "").strip()
+            if text:
+                logger.info(
+                    "Mistral returned no segment timestamps; "
+                    "emitting a single un-timestamped segment."
+                )
+                segments.append(
+                    TranscriptSegment(start=0.0, end=0.0, text=text, speaker=None)
+                )
+            else:
+                logger.warning("Mistral returned empty transcript")
 
         usage = data.get("usage") or {}
         result = TranscriptResult(
