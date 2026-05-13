@@ -29,11 +29,5 @@
       "Read(*)",
       "LS(*)"
     ]
-  },
-  "env": {
-    "GIT_AUTHOR_NAME": "claude-bot",
-    "GIT_AUTHOR_EMAIL": "${CLAUDEBOT_EMAIL}",
-    "GIT_COMMITTER_NAME": "claude-bot",
-    "GIT_COMMITTER_EMAIL": "${CLAUDEBOT_EMAIL}"
   }
 }
