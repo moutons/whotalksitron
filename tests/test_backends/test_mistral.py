@@ -192,3 +192,71 @@ def test_transcribe_non_json_response_raises_runtime_error(tmp_path):
         pytest.raises(RuntimeError, match="parse"),
     ):
         backend.transcribe(audio)
+
+
+def test_transcribe_413_friendly_error_no_retry(tmp_path):
+    from whotalksitron.backends.mistral import MistralBackend
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"x")
+    backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
+    with (
+        patch(
+            "whotalksitron.backends.mistral.httpx.post",
+            return_value=_mock_response(413, body={"error": "too large"}),
+        ) as post,
+        pytest.raises(RuntimeError, match="3 hours"),
+    ):
+        backend.transcribe(audio)
+    assert post.call_count == 1
+
+
+def test_transcribe_401_no_retry(tmp_path):
+    from whotalksitron.backends.mistral import MistralBackend
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"x")
+    backend = MistralBackend(_make_config(mistral_api_key="sk-bad"))
+    with (
+        patch(
+            "whotalksitron.backends.mistral.httpx.post",
+            return_value=_mock_response(401, body={"error": "unauthorized"}),
+        ) as post,
+        pytest.raises(RuntimeError),
+    ):
+        backend.transcribe(audio)
+    assert post.call_count == 1
+
+
+def test_transcribe_429_retries_then_fails(tmp_path):
+    from whotalksitron.backends.mistral import MistralBackend
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"x")
+    backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
+    with (
+        patch(
+            "whotalksitron.backends.mistral.httpx.post",
+            return_value=_mock_response(
+                429, body={"error": "rate limited"}, headers={"Retry-After": "1"}
+            ),
+        ) as post,
+        patch("whotalksitron.retry.time.sleep"),
+        pytest.raises(RuntimeError, match="3 retries"),
+    ):
+        backend.transcribe(audio)
+    assert post.call_count == 4  # initial + 3 retries
+
+
+def test_transcribe_500_retries_then_recovers(tmp_path):
+    from whotalksitron.backends.mistral import MistralBackend
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"x")
+    backend = MistralBackend(_make_config(mistral_api_key="sk-test"))
+    responses = [
+        _mock_response(500, body={"error": "boom"}),
+        _mock_response(200, _HAPPY_RESPONSE),
+    ]
+    with patch(
+        "whotalksitron.backends.mistral.httpx.post",
+        side_effect=responses,
+    ), patch("whotalksitron.retry.time.sleep"):
+        result = backend.transcribe(audio)
+    assert len(result.segments) == 2

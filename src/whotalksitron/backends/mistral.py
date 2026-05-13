@@ -19,11 +19,25 @@ import httpx
 from whotalksitron.config import Config
 from whotalksitron.models import SpeakerPool, TranscriptResult, TranscriptSegment
 from whotalksitron.progress import ProgressCallback
+from whotalksitron.retry import RetryExhausted, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
 # Prevent bearer token leakage via httpx DEBUG-level header logging.
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+_TRANSIENT_STATUS = {408, 429, 500, 502, 503, 504}
+
+
+class _FileTooLargeError(Exception):
+    pass
+
+
+class _TransientHTTPError(Exception):
+    def __init__(self, status_code: int, retry_after: float | None = None) -> None:
+        super().__init__(f"transient http {status_code}")
+        self.status_code = status_code
+        self.retry_after = retry_after
 
 
 class MistralBackend:
@@ -65,17 +79,66 @@ class MistralBackend:
         mime = _guess_mime(audio_path)
         audio_bytes = audio_path.read_bytes()
 
-        response = httpx.post(
-            url,
-            headers={"Authorization": f"Bearer {self._config.mistral_api_key}"},
-            files={"file": (audio_path.name, audio_bytes, mime)},
-            data={
-                "model": self._config.mistral_model,
-                "timestamp_granularities": "segment",
-            },
-            timeout=600.0,
-        )
-        response.raise_for_status()
+        def _post() -> httpx.Response:
+            resp = httpx.post(
+                url,
+                headers={"Authorization": f"Bearer {self._config.mistral_api_key}"},
+                files={"file": (audio_path.name, audio_bytes, mime)},
+                data={
+                    "model": self._config.mistral_model,
+                    "timestamp_granularities": "segment",
+                },
+                timeout=600.0,
+            )
+            if resp.status_code == 413:
+                raise _FileTooLargeError()
+            if resp.status_code in _TRANSIENT_STATUS:
+                retry_after_hdr = (
+                    resp.headers.get("Retry-After") if resp.headers else None
+                )
+                try:
+                    retry_after = float(retry_after_hdr) if retry_after_hdr else None
+                except ValueError:
+                    retry_after = None
+                if retry_after:
+                    logger.info(
+                        "Mistral asked us to retry after %.1fs (current backoff "
+                        "policy will use its own delay)",
+                        retry_after,
+                    )
+                raise _TransientHTTPError(resp.status_code, retry_after)
+            resp.raise_for_status()
+            return resp
+
+        try:
+            response = retry_with_backoff(
+                _post,
+                retries=3,
+                base_delay=2.0,
+                retry_on=(
+                    httpx.ConnectError,
+                    httpx.TimeoutException,
+                    _TransientHTTPError,
+                ),
+            )
+        except _FileTooLargeError as exc:
+            raise RuntimeError(
+                "Audio file exceeds Mistral's documented limits "
+                "(max 3 hours of audio per request). Use the gemini backend, "
+                "which supports large-file upload via the File API, or split "
+                "the recording."
+            ) from exc
+        except RetryExhausted as exc:
+            raise RuntimeError(
+                "Mistral API failed after 3 retries. Check MISTRAL_API_KEY "
+                "and network connectivity, or try a different backend."
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise RuntimeError(
+                f"Mistral API rejected the request "
+                f"(HTTP {exc.response.status_code}). Check your API key and "
+                f"request parameters."
+            ) from exc
 
         if progress:
             progress.update("transcribe", 80, "parsing response")
