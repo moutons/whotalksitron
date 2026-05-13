@@ -287,3 +287,12 @@ def test_config_write_default_round_trips_mistral(tmp_path):
     assert reloaded.mistral_keychain_account == "mistral"
     assert reloaded.mistral_keychain_service == "mistral-apikey"
     assert reloaded.mistral_endpoint == "https://api.mistral.ai/v1"
+
+
+def test_config_show_masks_mistral_key():
+    cfg = Config()
+    cfg.mistral_api_key = "sk-abcdefghijklmnop"
+    rendered = cfg.show()
+    assert "sk-abcdefghijklmnop" not in rendered
+    assert "mistral.api_key" in rendered
+    assert "mistral.model" in rendered

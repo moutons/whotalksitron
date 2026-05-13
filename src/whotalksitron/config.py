@@ -200,6 +200,11 @@ class Config:
         lines.append(f"logging.file = {self.log_file!r}")
         lines.append(f"logging.file_max_bytes = {self.log_file_max_bytes!r}")
         lines.append(f"logging.file_backup_count = {self.log_file_backup_count!r}")
+
+        masked_mistral = _mask_secret(self.mistral_api_key)
+        lines.append(f"mistral.api_key = {masked_mistral!r}")
+        lines.append(f"mistral.endpoint = {self.mistral_endpoint!r}")
+        lines.append(f"mistral.model = {self.mistral_model!r}")
         return "\n".join(lines)
 
     def write_default(self, path: Path) -> None:
