@@ -270,27 +270,45 @@ def load_config(
 
     cfg = Config.from_file(config_path)
 
-    # Keychain / 1Password: resolve API key if not set in config
-    if not cfg.gemini_api_key:
-        cfg.gemini_api_key = _resolve_secret(cfg) or ""
-
+    # Apply env vars first so they take precedence over Keychain / 1Password.
     str_env_map = {
         "GEMINI_API_KEY": "gemini_api_key",
         "GOOGLE_CLOUD_API_KEY": "gemini_api_key",
         "GOOGLE_CLOUD_PROJECT": "gemini_project",
         "GOOGLE_CLOUD_LOCATION": "gemini_location",
         "GOOGLE_CLOUD_STORAGE_BUCKET": "gemini_gcs_bucket",
+        "MISTRAL_API_KEY": "mistral_api_key",
         "WHOTALKSITRON_BACKEND": "backend",
         "WHOTALKSITRON_LOG_LEVEL": "log_level",
     }
     for env_var, attr in str_env_map.items():
         val = os.environ.get(env_var)
         if val is not None:
-            if attr == "gemini_api_key":
+            if attr in {"gemini_api_key", "mistral_api_key"}:
                 logger.debug("Setting %s from %s", attr, env_var)
             else:
                 logger.debug("Setting %s=%s from %s", attr, val, env_var)
             setattr(cfg, attr, val)
+
+    if not cfg.gemini_api_key:
+        cfg.gemini_api_key = (
+            _resolve_secret(
+                keychain_account=cfg.gemini_keychain_account,
+                keychain_service=cfg.gemini_keychain_service,
+                op_reference=cfg.gemini_op_reference,
+            )
+            or ""
+        )
+
+    if not cfg.mistral_api_key:
+        cfg.mistral_api_key = (
+            _resolve_secret(
+                keychain_account=cfg.mistral_keychain_account,
+                keychain_service=cfg.mistral_keychain_service,
+                op_reference=cfg.mistral_op_reference,
+            )
+            or ""
+        )
 
     vertexai_env = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI")
     if vertexai_env is not None:
@@ -308,11 +326,14 @@ def load_config(
     return cfg
 
 
-def _resolve_secret(cfg: Config) -> str | None:
+def _resolve_secret(
+    *,
+    keychain_account: str,
+    keychain_service: str,
+    op_reference: str,
+) -> str | None:
     import subprocess
 
-    keychain_account = cfg.gemini_keychain_account
-    keychain_service = cfg.gemini_keychain_service
     try:
         result = subprocess.run(  # noqa: S603
             [  # noqa: S607
@@ -347,20 +368,25 @@ def _resolve_secret(cfg: Config) -> str | None:
     except subprocess.TimeoutExpired:
         logger.debug("Keychain lookup timed out")
 
-    op_ref = cfg.gemini_op_reference or None
-    if op_ref:
+    if op_reference:
         try:
             result = subprocess.run(  # noqa: S603
-                ["op", "read", op_ref],  # noqa: S607
+                ["op", "read", op_reference],  # noqa: S607
                 capture_output=True,
                 text=True,
                 check=False,
                 timeout=10,
             )
             if result.returncode == 0 and result.stdout.strip():
-                logger.debug("API key loaded from 1Password")
+                logger.debug(
+                    "API key loaded from 1Password (%s)", keychain_service
+                )
                 return result.stdout.strip()
-            logger.debug("1Password lookup returned %d", result.returncode)
+            logger.debug(
+                "1Password lookup returned %d (%s)",
+                result.returncode,
+                keychain_service,
+            )
         except FileNotFoundError:
             logger.debug("op command not found, skipping 1Password")
         except subprocess.TimeoutExpired:

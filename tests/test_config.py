@@ -1,4 +1,6 @@
+import inspect
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import tomli_w
@@ -296,3 +298,37 @@ def test_config_show_masks_mistral_key():
     assert "sk-abcdefghijklmnop" not in rendered
     assert "mistral.api_key" in rendered
     assert "mistral.model" in rendered
+
+
+def test_resolve_secret_signature_is_keyword_only():
+    from whotalksitron.config import _resolve_secret
+    sig = inspect.signature(_resolve_secret)
+    params = list(sig.parameters.values())
+    names = {p.name for p in params}
+    assert names == {"keychain_account", "keychain_service", "op_reference"}
+    assert all(p.kind == inspect.Parameter.KEYWORD_ONLY for p in params)
+
+
+def test_load_config_calls_resolve_secret_for_both_backends_when_empty(monkeypatch, tmp_path):  # noqa: E501
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_API_KEY", raising=False)
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("")
+
+    with patch("whotalksitron.config._resolve_secret", return_value=None) as m:
+        load_config(config_path, {})
+
+    assert m.call_count == 2
+    calls = [c.kwargs for c in m.call_args_list]
+    assert {
+        "keychain_account": "vertex",
+        "keychain_service": "vertex-apikey",
+        "op_reference": "",
+    } in calls, calls
+    assert {
+        "keychain_account": "mistral",
+        "keychain_service": "mistral-apikey",
+        "op_reference": "",
+    } in calls, calls
