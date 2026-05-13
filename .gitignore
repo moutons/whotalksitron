@@ -25,9 +25,32 @@ out/
 # Dependencies
 node_modules/
 vendor/
+
+# Worktrees
+.worktrees/
+
+# Logs
+*.log
+debug*.txt
+
+# Private
+.private-journal/
+
+# --- Python ---
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .venv/
+venv/
+.python-version
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.ty_cache/
+.tox/
+.eggs/
+*.egg-info/
 uv.lock
 
 # Coverage
@@ -35,14 +58,4 @@ coverage/
 *.cover
 htmlcov/
 .coverage
-.pytest_cache/
-
-# Worktrees
-.worktrees/
-
-# Private
-.private-journal/
-
-# Logs
-*.log
-debug*.txt
+.coverage.*

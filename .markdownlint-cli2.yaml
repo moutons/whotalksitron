@@ -1,6 +1,19 @@
+gitignore: true
+fix: true
+noBanner: true
+noProgress: true
+
 ignores:
   - "docs/superpowers/plans/**"
+  - "docs/superpowers/specs/**"
+  - "docs/decisions/**"
+  - ".agents/skills/**"
   - "CHANGELOG.md"
+  - "**/node_modules/**"
+  - "**/.venv/**"
+  - "**/venv/**"
+  - "**/target/**"
+  - "**/vendor/**"
 
 config:
   # Disable line length limit
