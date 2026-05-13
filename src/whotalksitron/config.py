@@ -72,6 +72,7 @@ class Config:
         cfg = cls()
         defaults = data.get("defaults", {})
         gemini = data.get("gemini", {})
+        mistral = data.get("mistral", {})
         pyannote = data.get("pyannote", {})
         whisper = data.get("whisper", {})
         speakers = data.get("speakers", {})
@@ -104,6 +105,19 @@ class Config:
             cfg.gemini_keychain_service = gemini["keychain_service"]
         if "op_reference" in gemini:
             cfg.gemini_op_reference = gemini["op_reference"]
+
+        if "api_key" in mistral:
+            cfg.mistral_api_key = mistral["api_key"]
+        if "endpoint" in mistral:
+            cfg.mistral_endpoint = mistral["endpoint"]
+        if "model" in mistral:
+            cfg.mistral_model = mistral["model"]
+        if "keychain_account" in mistral:
+            cfg.mistral_keychain_account = mistral["keychain_account"]
+        if "keychain_service" in mistral:
+            cfg.mistral_keychain_service = mistral["keychain_service"]
+        if "op_reference" in mistral:
+            cfg.mistral_op_reference = mistral["op_reference"]
 
         if "whisper_model" in pyannote:
             cfg.pyannote_whisper_model = pyannote["whisper_model"]

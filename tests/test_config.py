@@ -257,3 +257,22 @@ def test_config_has_mistral_defaults():
     assert cfg.mistral_keychain_account == "mistral"
     assert cfg.mistral_keychain_service == "mistral-apikey"
     assert cfg.mistral_op_reference == ""
+
+
+def test_config_from_dict_reads_mistral_table():
+    data = {
+        "mistral": {
+            "api_key": "sk-test-123",
+            "endpoint": "https://api.mistral.ai/v1",
+            "model": "voxtral-mini-2507",
+            "keychain_account": "alt-account",
+            "keychain_service": "alt-service",
+            "op_reference": "op://Private/mistral/key",
+        }
+    }
+    cfg = Config.from_dict(data)
+    assert cfg.mistral_api_key == "sk-test-123"
+    assert cfg.mistral_model == "voxtral-mini-2507"
+    assert cfg.mistral_keychain_account == "alt-account"
+    assert cfg.mistral_keychain_service == "alt-service"
+    assert cfg.mistral_op_reference == "op://Private/mistral/key"
