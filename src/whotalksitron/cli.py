@@ -429,7 +429,10 @@ def main(ctx: click.Context, log_level, log_format, progress, quiet) -> None:
 
 @main.command()
 @click.argument("audio_file", type=click.Path(exists=True, path_type=Path))
-@click.option("--backend", type=click.Choice(["gemini", "pyannote", "whisper"]))
+@click.option(
+    "--backend",
+    type=click.Choice(["gemini", "pyannote", "whisper", "mistral"]),
+)
 @click.option("--podcast", default=None)
 @click.option("--output", "-o", default=None, type=click.Path(path_type=Path))
 @click.option("--model", default=None)

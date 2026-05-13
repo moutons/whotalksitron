@@ -973,3 +973,13 @@ def test_entrypoint_usage_error(runner):
 
     assert exit_code == 2
     assert "bogus" in output
+
+
+def test_cli_accepts_backend_mistral(runner, fake_audio):
+    """Test that 'mistral' is an accepted backend choice."""
+    result = runner.invoke(
+        main, ["transcribe", "--backend", "mistral", str(fake_audio)]
+    )
+    # Should not fail due to invalid backend choice
+    # (will fail for other reasons like missing config, but not for Choice validation)
+    assert "Invalid value for '--backend'" not in result.output
